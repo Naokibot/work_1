@@ -87,14 +87,16 @@ function makeSqlJsReadable(bytes: Uint8Array): Uint8Array {
   // built-in `COLLATE binary ` lets SQLite parse Anki's schema without touching
   // note/card payloads or changing byte offsets in the database pages.
   const output = bytes.slice();
-  const needle = textEncoder.encode('COLLATE unicase');
-  const replacement = textEncoder.encode('COLLATE binary ');
-  for (let start = 0; start <= output.length - needle.length; start += 1) {
-    let matches = true;
-    for (let index = 0; index < needle.length; index += 1) {
-      if (output[start + index] !== needle[index]) { matches = false; break; }
+  for (const [from, to] of [['COLLATE unicase', 'COLLATE binary '], ['collate unicase', 'collate binary ']] as const) {
+    const needle = textEncoder.encode(from);
+    const replacement = textEncoder.encode(to);
+    for (let start = 0; start <= output.length - needle.length; start += 1) {
+      let matches = true;
+      for (let index = 0; index < needle.length; index += 1) {
+        if (output[start + index] !== needle[index]) { matches = false; break; }
+      }
+      if (matches) { output.set(replacement, start); start += needle.length - 1; }
     }
-    if (matches) { output.set(replacement, start); start += needle.length - 1; }
   }
   return output;
 }

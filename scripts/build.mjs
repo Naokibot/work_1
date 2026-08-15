@@ -24,8 +24,9 @@ async function copyVendor(source, destination, fallback = '') {
 await copyVendor(path.join(root, 'node_modules', 'mathjax', 'es5', 'tex-svg-full.js'), 'mathjax.js', 'window.MathJax=window.MathJax||{};');
 await copyVendor(path.join(root, 'node_modules', 'fflate', 'umd', 'index.js'), 'fflate.js');
 await copyVendor(path.join(root, 'node_modules', 'fzstd', 'umd', 'index.js'), 'fzstd.js');
-await copyVendor(path.join(root, 'node_modules', 'sql.js', 'dist', 'sql-wasm.js'), 'sql-wasm.js');
-await copyVendor(path.join(root, 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'), 'sql-wasm.wasm');
+// The asm.js build keeps the strict page CSP intact. It exposes the same initSqlJs API
+// without requiring WebAssembly compilation/eval permissions in Chromium or WebKit.
+await copyVendor(path.join(root, 'node_modules', 'sql.js', 'dist', 'sql-asm.js'), 'sql-wasm.js');
 
 async function list(dir, prefix = '') {
   const out = [];

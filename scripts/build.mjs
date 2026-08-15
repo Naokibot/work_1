@@ -13,7 +13,7 @@ await mkdir(vendorDir, { recursive: true });
 
 const tsc = spawnSync('tsc', ['-p', 'tsconfig.json'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
 if (tsc.status !== 0) process.exit(tsc.status ?? 1);
-for (const file of ['index.html', 'styles.css']) await cp(path.join(root, file), path.join(dist, file));
+for (const file of ['index.html', 'styles.css', 'anki-desktop.css']) await cp(path.join(root, file), path.join(dist, file));
 for (const file of ['manifest.webmanifest', 'icon.svg']) await cp(path.join(root, 'public', file), path.join(dist, file));
 
 async function copyVendor(source, destination, fallback = '') {
@@ -38,7 +38,7 @@ async function list(dir, prefix = '') {
 }
 const assets = await list(path.join(dist, 'assets'));
 const vendor = await list(vendorDir);
-const precache = ['./', './index.html', './styles.css', './manifest.webmanifest', './icon.svg', ...vendor.map((file) => `./vendor/${file}`), ...assets.map((file) => `./assets/${file}`)];
+const precache = ['./', './index.html', './styles.css', './anki-desktop.css', './manifest.webmanifest', './icon.svg', ...vendor.map((file) => `./vendor/${file}`), ...assets.map((file) => `./assets/${file}`)];
 const hash = createHash('sha256');
 for (const file of precache.filter((file) => file !== './').map((file) => file.replace(/^\.\//, ''))) { hash.update(file); hash.update(await readFile(path.join(dist, file))); }
 const template = await readFile(path.join(root, 'public', 'sw.template.js'), 'utf8');

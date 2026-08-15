@@ -22,7 +22,7 @@ This review is a release gate for the Study Cards PWA. A feature is only called 
 - Manual backup snapshot, database check and media check.
 - Statistics rendering.
 - JSON and CSV export.
-- Sync client transport with a mocked Google Apps Script endpoint.
+- Sync client transport with a mocked Google Apps Script endpoint whose URL follows the same deployment-ID validation rules as production.
 - Profile creation and switching.
 - Offline reload through the Service Worker cache.
 

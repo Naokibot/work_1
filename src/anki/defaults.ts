@@ -124,8 +124,8 @@ export function defaultNoteTypes(): NoteTypeDefinition[] {
     builtinNoteType(
       IMAGE_OCCLUSION_NOTE_TYPE_ID,
       'Image Occlusion',
-      ['Image', 'Masks', 'Extra'],
-      [{ id: 'template_image_occlusion', name: 'Image Occlusion', front: '{{Image}}', back: '{{Image}}<hr id="answer">{{Extra}}' }],
+      ['Occlusions', 'Image', 'Header', 'Back Extra', 'Comments'],
+      [{ id: 'template_image_occlusion', name: 'Image Occlusion', front: '{{#Header}}{{Header}}<br>{{/Header}}{{Image}}', back: '{{FrontSide}}<hr id="answer">{{Back Extra}}{{Comments}}' }],
       'image-occlusion'
     )
   ];

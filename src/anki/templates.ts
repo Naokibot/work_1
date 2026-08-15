@@ -8,6 +8,7 @@ import type {
   StudyNote
 } from '../types.js';
 import { emptyCard } from './defaults.js';
+import { legacyMasksFromJson, parseNativeOcclusions } from './image-occlusion.js';
 import { nowIso, uid } from '../utils/core.js';
 
 export interface RenderContext {
@@ -259,20 +260,39 @@ export function generateCardsForNote(note: StudyNote, state: AnkiState, existing
 
   if (noteType.kind === 'image-occlusion') {
     const image = fieldValue(note, 'Image');
-    const extra = fieldValue(note, 'Extra');
+    const header = fieldValue(note, 'Header');
+    const extra = fieldValue(note, 'Back Extra') || fieldValue(note, 'Extra');
+    const comments = fieldValue(note, 'Comments');
+    const nativeGroups = parseNativeOcclusions(fieldValue(note, 'Occlusions'));
+    const legacyMasks = legacyMasksFromJson(fieldValue(note, 'Masks'));
+    const groups = nativeGroups.length
+      ? nativeGroups
+      : legacyMasks.map((mask, index) => ({ ordinal: index + 1, masks: [mask] }));
     const output: StudyCard[] = [];
     const template = noteType.templates[0];
     if (!template) return output;
-    masksFromNote(note).forEach((mask, offset) => {
-      const key = `${template.id}:mask:${mask.id}`;
-      const existing = byTemplate.get(key);
+    groups.forEach((group, offset) => {
+      const active = group.masks.find((mask) => !mask.occludeInactive) ?? group.masks[0];
+      if (!active) return;
+      const key = template.id + ':c' + group.ordinal;
+      const existing = byTemplate.get(key) ?? byTemplate.get(template.id + ':mask:' + active.id);
       const base = makeCard(note, noteType, deck, template, key, positionBase + offset, existing);
+      const hideAll = group.masks.some((mask) => mask.occludeInactive);
       output.push({
         ...base,
-        question: '画像の隠された部分を答えてください。',
-        answer: mask.answer || '画像の隠された部分',
-        explanation: extra,
-        imageOcclusion: { imageDataUrl: image, mask, extra }
+        question: header ? header + '<div class="io-prompt">画像の隠された部分を答えてください。</div>' : '画像の隠された部分を答えてください。',
+        answer: active.text || active.answer || comments || extra || '画像の隠された部分',
+        explanation: [extra, comments].filter(Boolean).join('<br>'),
+        imageOcclusion: {
+          imageDataUrl: image,
+          mask: active,
+          masks: group.masks,
+          mode: hideAll ? 'hide-all-guess-one' : 'hide-one-guess-one',
+          activeOrdinal: group.ordinal,
+          header,
+          comments,
+          extra
+        }
       });
     });
     return output;

@@ -20,7 +20,30 @@ export class ReviewController{
  private async requestWakeLock(){if(!('wakeLock'in navigator))return;try{this.wakeLock=await navigator.wakeLock.request('screen')}catch{this.wakeLock=null}}
  private async loadCurrent(){if(!this.session)return;while(this.session.cursor<this.session.queue.length){const id=this.session.queue[this.session.cursor];if(!id)break;const card=await getCard(id);if(card&&!card.deletedAt&&!card.suspended&&(!card.buriedUntil||new Date(card.buriedUntil).getTime()<=Date.now())){this.currentCard=card;await this.renderCurrent(card,this.session.style);return}this.session.cursor++}await this.complete()}
  private async renderCurrent(card:StudyCard,style:ReviewStyle){if(!this.session)return;clearTimeout(this.autoHandle);this.pad.clear();this.setEraser(false);this.elements.number.textContent=card.cardNumber?`No. ${card.cardNumber}`:'';this.elements.tags.textContent=card.tags.join(' · ');await renderRich(this.elements.question,card.question);await renderRich(this.elements.answer,card.answer);await renderRich(this.elements.explanation,card.explanation);this.elements.favorite.textContent=card.favorite?'★':'☆';this.elements.flag.textContent=card.flag?`⚑${card.flag}`:'⚑';this.elements.answerPanel.hidden=true;this.elements.ratingRow.hidden=true;this.elements.typeResult.textContent='';this.elements.typeInput.value='';this.elements.io.replaceChildren();this.renderImageOcclusion(card,false);this.elements.progress.textContent=this.preferences?.showRemainingCount===false?'':`${Math.min(this.session.cursor+1,this.session.queue.length)} / ${this.session.queue.length}`;this.answeredCorrectly=true;this.responseMs=0;this.questionStartedAt=performance.now();this.startTimer();const choices=[plainText(card.answer),...card.distractors].filter(Boolean);const useType=Boolean(card.typedAnswer)||style==='type';const useChoice=!useType&&style==='choice'&&choices.length>=2;this.elements.typeArea.hidden=!useType;this.elements.choiceList.hidden=!useChoice;this.elements.showAnswer.hidden=useChoice||useType;this.elements.choiceList.replaceChildren();if(useChoice)for(const choice of shuffle(choices)){const b=document.createElement('button');b.type='button';b.className='choice-button';b.textContent=choice;b.addEventListener('click',()=>this.chooseAnswer(b,choice));this.elements.choiceList.append(b)}if(useType)window.setTimeout(()=>this.elements.typeInput.focus(),0);const preset=this.state?presetForCard(card,this.state):undefined;this.elements.timer.hidden=preset?.showTimer===false;if(preset?.autoplayAudio)replayMedia(this.elements.card);this.updateRatingPreviews(card,preset);if((preset?.autoAdvanceSeconds??0)>0)this.autoHandle=window.setTimeout(()=>{if(this.session&&this.currentCard?.id===card.id&&this.elements.ratingRow.hidden)this.revealAnswer()},(preset?.autoAdvanceSeconds??0)*1000);}
- private renderImageOcclusion(card:StudyCard,reveal:boolean){const data=card.imageOcclusion;if(!data)return;this.elements.io.hidden=false;const stage=document.createElement('div');stage.className='review-io-stage';const img=document.createElement('img');img.src=data.imageDataUrl;img.alt='Image Occlusion';stage.append(img);if(!reveal){const m=document.createElement('div');m.className='review-io-mask';Object.assign(m.style,{left:`${data.mask.x}%`,top:`${data.mask.y}%`,width:`${data.mask.width}%`,height:`${data.mask.height}%`});stage.append(m)}this.elements.io.replaceChildren(stage)}
+ private renderImageOcclusion(card:StudyCard,reveal:boolean){
+  const data=card.imageOcclusion;
+  if(!data){this.elements.io.hidden=true;return}
+  this.elements.io.hidden=false;
+  const stage=document.createElement('div');stage.className='review-io-stage';
+  const img=document.createElement('img');img.src=data.imageDataUrl;img.alt='Image Occlusion';stage.append(img);
+  if(!reveal){
+   const masks=data.masks?.length?data.masks:[data.mask];
+   for(const mask of masks){
+    const node=document.createElement('div');
+    const shape=mask.shape??'rect';
+    node.className='review-io-mask shape-'+shape+(mask.occludeInactive?' is-inactive':'');
+    if(shape==='polygon'&&mask.points?.length){
+     Object.assign(node.style,{left:'0',top:'0',width:'100%',height:'100%',clipPath:'polygon('+mask.points.map((point)=>point.x+'% '+point.y+'%').join(',')+')'});
+    }else{
+     Object.assign(node.style,{left:mask.x+'%',top:mask.y+'%',width:mask.width+'%',height:mask.height+'%'});
+     if(shape==='ellipse')node.style.borderRadius='50%';
+    }
+    if(mask.angle)node.style.transform='rotate('+mask.angle+'deg)';
+    stage.append(node);
+   }
+  }
+  this.elements.io.replaceChildren(stage)
+ }
  private updateRatingPreviews(card:StudyCard,preset:ReturnType<typeof presetForCard>):void{const labels:Record<Rating,string>={again:'1 もう一度',hard:'2 難しい',good:'3 普通',easy:'4 簡単'};for(const button of this.elements.ratingRow.querySelectorAll<HTMLButtonElement>('[data-rating]')){const rating=button.dataset.rating as Rating|undefined;if(!rating)continue;button.replaceChildren(document.createTextNode(labels[rating]));if(this.preferences?.showNextReviewTime!==false){const r=scheduleReview(card.schedule,rating,new Date(),{desiredRetention:preset?.desiredRetention,maximumIntervalDays:preset?.maximumIntervalDays,learningStepsMinutes:preset?.learningStepsMinutes,relearningStepsMinutes:preset?.relearningStepsMinutes,parameters:preset?.fsrsParameters,easyDays:preset?.easyDays});const small=document.createElement('small');small.textContent=this.intervalText(r.intervalDays);button.append(small)}}}
  private intervalText(days:number):string{const minutes=Math.round(days*1440);if(minutes<60)return `${Math.max(1,minutes)}分`;const hours=Math.round(days*24);if(hours<24)return `${hours}時間`;if(days<30)return `${Math.round(days)}日`;if(days<365)return `${Math.round(days/30)}か月`;return `${(days/365).toFixed(1)}年`;}
  private stopMedia():void{this.elements.card.querySelectorAll<HTMLMediaElement>('audio,video').forEach(m=>{try{m.pause()}catch{}});if('speechSynthesis'in window)speechSynthesis.cancel();}

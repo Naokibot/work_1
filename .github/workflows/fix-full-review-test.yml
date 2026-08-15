@@ -1,0 +1,35 @@
+name: Fix Full Review Test
+
+on:
+  push:
+    branches: [review-full-function-20260815]
+    paths:
+      - .github/workflows/fix-full-review-test.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: review-full-function-20260815
+      - name: Fix store names
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/full-function.e2e.mjs')
+          s=p.read_text()
+          s=s.replace("['cards','history','snapshots','session','settings','syncQueue','ankiState']", "['cards','history','snapshots','sessions','settings','queue','anki']")
+          s=s.replace("getOne('session','current')", "getOne('sessions','current')")
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "Hotaru(Naokibot)"
+          git config user.email "sagakatsuyuki.555@gmail.com"
+          git add tests/full-function.e2e.mjs
+          git commit -m "fix full review IndexedDB access"
+          git push origin HEAD:review-full-function-20260815

@@ -1,0 +1,36 @@
+name: Apply Anki core expansion
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.patch/anki-*.b64'
+      - 'scripts/apply-anki-parity.mjs'
+      - '.github/workflows/apply-anki-parity.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply reviewed Anki expansion
+        run: node scripts/apply-anki-parity.mjs
+      - name: Validate source
+        run: |
+          npm install --ignore-scripts --no-audit
+          npm run check
+      - name: Commit source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "add Anki core study features"
+          git push origin HEAD:main

@@ -1,0 +1,46 @@
+name: Anki Interoperability
+
+on:
+  push:
+    branches:
+      - main
+      - agent/anki-parity-rewrite-20260815
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  official-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install application dependencies
+        run: npm ci --ignore-scripts --no-audit
+      - name: Install official Anki library
+        run: python -m pip install --disable-pip-version-check 'anki==26.5'
+      - name: Generate official latest-format collection package
+        run: python scripts/generate-official-anki-fixture.py /tmp/official-anki-26.5.colpkg
+      - name: Inspect official package entries
+        run: |
+          python - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('/tmp/official-anki-26.5.colpkg') as archive:
+              print('official-package-entries:', ', '.join(archive.namelist()))
+          PY
+      - name: Build browser application
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Import official Anki package
+        env:
+          OFFICIAL_ANKI_PACKAGE: /tmp/official-anki-26.5.colpkg
+        run: node tests/official-anki-package.e2e.mjs

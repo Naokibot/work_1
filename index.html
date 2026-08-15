@@ -1,6 +1,92 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f7f7f5"><meta name="color-scheme" content="light dark"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'self'"><link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css"><title>Study Cards</title></head><body>
-<div id="app-shell"><header class="topbar"><div><p class="eyebrow">WORK_1</p><h1 id="page-title">暗記カード</h1></div><button id="sync-button" class="icon-button" type="button" aria-label="Google Sheetsと同期"><span>↻</span><span id="sync-badge" class="badge" hidden>0</span></button></header><div id="status-message" class="status-message" role="status" aria-live="polite" hidden></div><main id="view" tabindex="-1"></main><nav class="bottom-nav" aria-label="メインメニュー"><button type="button" data-route="home" class="nav-item is-active"><span>⌂</span><span>ホーム</span></button><button type="button" data-route="cards" class="nav-item"><span>▤</span><span>カード</span></button><button type="button" data-route="anki" class="nav-item"><span>◆</span><span>Anki</span></button><button type="button" data-route="stats" class="nav-item"><span>⌁</span><span>記録</span></button><button type="button" data-route="settings" class="nav-item"><span>⚙</span><span>設定</span></button></nav><button id="add-card-button" class="fab" type="button" aria-label="カードを追加">＋</button></div>
-<section id="review-screen" class="review-screen" hidden aria-label="暗記セッション"><header class="review-header"><button id="review-close" class="text-button" type="button">終了</button><div><p id="review-progress" class="review-progress">0 / 0</p><p id="review-timer" class="review-timer">00:00</p></div><div class="review-actions"><button id="review-replay" class="icon-button small-icon" type="button" title="音声を再生">▶</button><button id="review-flag" class="icon-button small-icon" type="button" title="フラグ">⚑</button><button id="review-bury" class="icon-button small-icon" type="button" title="今日埋める">⌄</button><button id="review-suspend" class="icon-button small-icon" type="button" title="保留">Ⅱ</button><button id="review-favorite" class="icon-button small-icon" type="button" title="マーク">☆</button></div></header><main class="review-main"><div class="review-card" id="review-card"><p id="review-number" class="review-number"></p><p id="review-tags" class="tag-line"></p><div id="review-io" class="review-io" hidden></div><div id="review-question" class="review-question"></div><div id="choice-list" class="choice-list" hidden></div><section id="type-answer-area" class="type-answer-area" hidden><label>答えを入力<input id="type-answer-input" autocomplete="off" autocapitalize="off"></label><button id="type-answer-check" class="primary-button" type="button">答え合わせ</button><p id="type-answer-result" class="type-answer-result"></p></section><button id="show-answer" class="primary-button wide" type="button">答えを見る</button><section id="answer-panel" class="answer-panel" hidden><p class="label">答え</p><div id="review-answer" class="review-answer"></div><div id="review-explanation" class="review-explanation"></div></section></div><section class="scratch-section"><div class="scratch-toolbar"><strong>計算メモ</strong><div class="tool-row"><button id="pad-pen" class="tool-button is-active" type="button">ペン</button><button id="pad-eraser" class="tool-button" type="button">消しゴム</button><button id="pad-undo" class="tool-button" type="button">戻す</button><button id="pad-redo" class="tool-button" type="button">進む</button><button id="pad-clear" class="tool-button" type="button">消去</button></div></div><canvas id="scratch-pad"></canvas></section></main><footer id="rating-row" class="rating-row" hidden><button type="button" data-rating="again" class="rating-button">1 もう一度</button><button type="button" data-rating="hard" class="rating-button">2 難しい</button><button type="button" data-rating="good" class="rating-button">3 普通</button><button type="button" data-rating="easy" class="rating-button">4 簡単</button></footer></section>
-<dialog id="card-dialog" class="dialog"><form id="card-form"><div class="dialog-header"><h2 id="card-dialog-title">カードを追加</h2><button id="card-close" class="icon-button" type="button">×</button></div><input id="card-id" type="hidden"><label>カード番号（任意）<input id="card-number" maxlength="100"></label><label>問題<textarea id="card-question" required maxlength="5000" rows="4"></textarea></label><label>正解<textarea id="card-answer" required maxlength="5000" rows="3"></textarea></label><div class="grid-3"><label>誤答1<input id="card-wrong-1"></label><label>誤答2<input id="card-wrong-2"></label><label>誤答3<input id="card-wrong-3"></label></div><label>解説<textarea id="card-explanation" maxlength="10000" rows="3"></textarea></label><label>タグ<input id="card-tags" placeholder="数学, 図形"></label><label class="check-row"><input id="card-favorite" type="checkbox">マーク</label><p id="card-form-error" class="form-error"></p><div class="dialog-actions"><button id="card-cancel" type="button" class="secondary-button">キャンセル</button><button id="card-save" type="submit" class="primary-button">保存</button></div></form></dialog>
-<dialog id="study-dialog" class="dialog compact"><form id="study-form"><div class="dialog-header"><h2>学習を開始</h2><button id="study-close" class="icon-button" type="button">×</button></div><label>学習モード<select id="study-mode"><option value="due">今日の復習</option><option value="new">新規カード</option><option value="weak">苦手カード</option><option value="wrong">最近の間違い</option><option value="favorite">マーク済み</option><option value="random">ランダム</option><option value="tag">タグ指定</option><option value="exam">試験モード</option></select></label><label>回答方法<select id="study-style"><option value="self">自己評価</option><option value="choice">選択問題</option><option value="type">入力回答</option></select></label><label>デッキ<select id="study-deck"></select></label><label>タグ<select id="study-tag"><option value="">すべて</option></select></label><label>問題数<select id="study-size"><option>10</option><option selected>20</option><option>30</option><option>50</option><option>100</option></select></label><div class="dialog-actions"><button id="study-cancel" type="button" class="secondary-button">キャンセル</button><button type="submit" class="primary-button">開始</button></div></form></dialog>
-<script defer src="./vendor/mathjax.js"></script><script type="module" src="./assets/main.js"></script></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ececec">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Study Cards</title>
+</head>
+<body>
+  <div id="app-shell" class="anki-window">
+    <header class="desktop-chrome">
+      <div class="menu-bar" aria-label="アプリケーションメニュー">
+        <button type="button" class="menu-item" data-menu="file">ファイル</button>
+        <button type="button" class="menu-item" data-menu="edit">編集</button>
+        <button type="button" class="menu-item" data-menu="tools">ツール</button>
+        <button type="button" class="menu-item" data-menu="help">ヘルプ</button>
+        <span class="menu-spacer"></span>
+        <span id="profile-label" class="profile-label"></span>
+      </div>
+      <div class="main-toolbar" role="toolbar" aria-label="メインツールバー">
+        <button type="button" data-route="home" class="toolbar-button is-active" title="デッキ"><span class="toolbar-icon">▤</span><span>デッキ</span></button>
+        <button type="button" id="add-card-button" class="toolbar-button" title="追加"><span class="toolbar-icon">＋</span><span>追加</span></button>
+        <button type="button" data-route="anki" class="toolbar-button" title="ブラウザ"><span class="toolbar-icon">⌕</span><span>ブラウザ</span></button>
+        <button type="button" data-route="stats" class="toolbar-button" title="統計"><span class="toolbar-icon">▥</span><span>統計</span></button>
+        <button type="button" id="sync-button" class="toolbar-button sync-toolbar" title="同期"><span class="toolbar-icon">↻</span><span>同期</span><span id="sync-badge" class="badge" hidden>0</span></button>
+        <span class="toolbar-separator"></span>
+        <button type="button" data-route="settings" class="toolbar-button" title="設定"><span class="toolbar-icon">⚙</span><span>設定</span></button>
+      </div>
+    </header>
+    <h1 id="page-title" class="sr-only">デッキ</h1>
+    <div id="status-message" class="status-message" role="status" aria-live="polite" hidden></div>
+    <main id="view" class="workspace" tabindex="-1"></main>
+  </div>
+
+  <section id="review-screen" class="review-screen" hidden aria-label="復習">
+    <header class="review-header">
+      <button id="review-close" class="review-link" type="button">デッキ</button>
+      <div class="review-counters"><p id="review-progress" class="review-progress">0 / 0</p><p id="review-timer" class="review-timer">00:00</p></div>
+      <div class="review-actions">
+        <button id="review-replay" class="review-icon" type="button" title="音声をもう一度再生">▶</button>
+        <button id="review-flag" class="review-icon" type="button" title="フラグ">⚑</button>
+        <button id="review-bury" class="review-icon" type="button" title="カードを埋める">⌄</button>
+        <button id="review-suspend" class="review-icon" type="button" title="カードを保留">Ⅱ</button>
+        <button id="review-favorite" class="review-icon" type="button" title="マーク">☆</button>
+      </div>
+    </header>
+    <main class="review-main">
+      <article class="review-card" id="review-card">
+        <p id="review-number" class="review-number"></p><p id="review-tags" class="review-tags"></p><div id="review-io" class="review-io" hidden></div>
+        <div id="review-question" class="review-question"></div><div id="choice-list" class="choice-list" hidden></div>
+        <section id="type-answer-area" class="type-answer-area" hidden><label>答えを入力<input id="type-answer-input" autocomplete="off" autocapitalize="off" spellcheck="false"></label><button id="type-answer-check" class="anki-primary" type="button">答え合わせ</button><p id="type-answer-result" class="type-answer-result"></p></section>
+        <button id="show-answer" class="show-answer-button" type="button">答えを表示</button>
+        <section id="answer-panel" class="answer-panel" hidden><hr><div id="review-answer" class="review-answer"></div><div id="review-explanation" class="review-explanation"></div></section>
+      </article>
+      <details class="scratch-section"><summary>スクラッチパッド</summary><div class="scratch-toolbar"><button id="pad-pen" class="tool-button is-active" type="button">ペン</button><button id="pad-eraser" class="tool-button" type="button">消しゴム</button><button id="pad-undo" class="tool-button" type="button">戻す</button><button id="pad-redo" class="tool-button" type="button">進む</button><button id="pad-clear" class="tool-button" type="button">消去</button></div><canvas id="scratch-pad"></canvas></details>
+    </main>
+    <footer id="rating-row" class="rating-row" hidden><button type="button" data-rating="again" class="rating-button again">1 もう一度</button><button type="button" data-rating="hard" class="rating-button hard">2 難しい</button><button type="button" data-rating="good" class="rating-button good">3 普通</button><button type="button" data-rating="easy" class="rating-button easy">4 簡単</button></footer>
+  </section>
+
+  <dialog id="card-dialog" class="dialog add-dialog">
+    <form id="card-form">
+      <div class="dialog-titlebar"><h2 id="card-dialog-title">追加</h2><button id="card-close" class="dialog-close" type="button" aria-label="閉じる">×</button></div>
+      <div class="add-meta-grid"><label>ノートタイプ<select id="note-type"></select></label><label>デッキ<select id="note-deck"></select></label></div>
+      <div id="note-editor-toolbar" class="note-editor-toolbar" aria-label="編集ツール"><button type="button" data-editor-command="bold"><strong>B</strong></button><button type="button" data-editor-command="italic"><em>I</em></button><button type="button" data-editor-command="underline"><u>U</u></button><button type="button" data-editor-command="cloze">[…] Cloze</button><button type="button" data-editor-command="mathjax">MathJax</button></div>
+      <div id="note-fields" class="note-fields"></div><label>タグ<input id="note-tags" autocomplete="off" placeholder="tag1 tag2::subtag"></label><p id="card-form-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions"><button id="card-cancel" type="button" class="anki-button">閉じる</button><button id="card-save" type="submit" class="anki-primary">追加</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="study-dialog" class="dialog study-dialog">
+    <form id="study-form"><div class="dialog-titlebar"><h2>カスタム学習</h2><button id="study-close" class="dialog-close" type="button">×</button></div>
+      <label>学習モード<select id="study-mode"><option value="due">今日の復習</option><option value="new">新規カード</option><option value="weak">苦手カード</option><option value="wrong">最近の間違い</option><option value="favorite">マーク済み</option><option value="random">ランダム</option><option value="tag">タグ指定</option><option value="exam">試験モード</option></select></label>
+      <label>回答方法<select id="study-style"><option value="self">自己評価</option><option value="choice">選択問題</option><option value="type">入力回答</option></select></label>
+      <label>デッキ<select id="study-deck"></select></label><label>タグ<select id="study-tag"><option value="">すべて</option></select></label><label>問題数<select id="study-size"><option>10</option><option selected>20</option><option>30</option><option>50</option><option>100</option></select></label>
+      <div class="dialog-actions"><button id="study-cancel" type="button" class="anki-button">キャンセル</button><button type="submit" class="anki-primary">学習</button></div>
+    </form>
+  </dialog>
+
+  <input id="import-file" type="file" accept=".apkg,.colpkg,.json,.csv,.tsv,text/csv,text/tab-separated-values,application/json,application/zip" hidden>
+  <script defer src="./vendor/fflate.js"></script>
+  <script defer src="./vendor/fzstd.js"></script>
+  <script defer src="./vendor/sql-wasm.js"></script>
+  <script defer src="./vendor/mathjax.js"></script>
+  <script type="module" src="./assets/main.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'work-1-v1';
+const CACHE_NAME = '__CACHE_NAME__';
 const PRECACHE = __ASSET_LIST__;
 
 self.addEventListener('install', (event) => {
@@ -21,10 +21,12 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-store' })
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', copy));
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', copy));
+          }
           return response;
         })
         .catch(() => caches.match('./index.html').then((response) => response || caches.match('./')))

@@ -52,7 +52,7 @@ async function postOpaque(settings: AppSettings, item: SyncQueueItem): Promise<v
 
 function jsonp<T>(url: URL): Promise<T> {
   return new Promise((resolve, reject) => {
-    const callback = `__work1_${crypto.randomUUID().replaceAll('-', '_')}`;
+    const callback = `__work1_${uid('cb').replaceAll('-', '_')}`;
     const script = document.createElement('script');
     const timer = window.setTimeout(() => finish(new Error('Sync pull timed out')), 15000);
     const finish = (error?: Error, value?: T) => {
@@ -133,7 +133,11 @@ async function applyPull(result: PullResult, queueBeforePull: SyncQueueItem[]): 
 
   for (const remote of result.cards) {
     const local = await getCard(remote.id);
-    if (!local || remote.updatedAt >= local.updatedAt || remote.deletedAt) await saveCard(remote);
+    const normalizedRemote: StudyCard = {
+      ...remote,
+      cardNumber: remote.cardNumber ?? local?.cardNumber ?? ''
+    };
+    if (!local || normalizedRemote.updatedAt >= local.updatedAt || normalizedRemote.deletedAt) await saveCard(normalizedRemote);
   }
   for (const item of result.history) await saveHistory(item);
   return conflicts;

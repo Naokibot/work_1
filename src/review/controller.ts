@@ -1,7 +1,7 @@
 import type { Rating, ReviewHistory, ReviewSession, ReviewStyle, StudyCard } from '../types.js';
 import { ScratchPad } from '../canvas/pad.js';
 import { scheduleReview } from '../scheduler/scheduler.js';
-import { clearCurrentSession, getCard, saveCard, saveCurrentSession, saveHistory, saveQueueItem } from '../storage/db.js';
+import { clearCurrentSession, getCard, getSettings, saveCard, saveCurrentSession, saveHistory, saveQueueItem } from '../storage/db.js';
 import { deviceLabel, nowIso, shuffle, uid } from '../utils/core.js';
 
 interface ReviewElements {
@@ -10,6 +10,7 @@ interface ReviewElements {
   progress: HTMLElement;
   timer: HTMLElement;
   favorite: HTMLButtonElement;
+  number: HTMLElement;
   question: HTMLElement;
   tags: HTMLElement;
   showAnswer: HTMLButtonElement;
@@ -52,6 +53,7 @@ export class ReviewController {
       progress: byId('review-progress'),
       timer: byId('review-timer'),
       favorite: byId<HTMLButtonElement>('review-favorite'),
+      number: byId('review-number'),
       question: byId('review-question'),
       tags: byId('review-tags'),
       showAnswer: byId<HTMLButtonElement>('show-answer'),
@@ -139,6 +141,7 @@ export class ReviewController {
     if (!this.session) return;
     this.pad.clear();
     this.setEraser(false);
+    this.elements.number.textContent = card.cardNumber ? `No. ${card.cardNumber}` : '';
     this.elements.question.textContent = card.question;
     this.elements.tags.textContent = card.tags.join(' · ');
     this.elements.answer.textContent = card.answer;
@@ -159,12 +162,12 @@ export class ReviewController {
     this.elements.choiceList.replaceChildren();
     if (useChoice) {
       for (const choice of shuffle(choices)) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'choice-button';
-        button.textContent = choice;
-        button.addEventListener('click', () => this.chooseAnswer(button, choice));
-        this.elements.choiceList.append(button);
+        const choiceButton = document.createElement('button');
+        choiceButton.type = 'button';
+        choiceButton.className = 'choice-button';
+        choiceButton.textContent = choice;
+        choiceButton.addEventListener('click', () => this.chooseAnswer(choiceButton, choice));
+        this.elements.choiceList.append(choiceButton);
       }
     }
   }
@@ -222,10 +225,16 @@ export class ReviewController {
     const now = new Date();
     const result = scheduleReview(this.currentCard.schedule, rating, now);
     const isCorrect = this.session.style === 'choice' ? this.answeredCorrectly : rating !== 'again';
-    const responseMs = Math.min(this.responseMs || 1000, 60 * 60 * 1000);
+    const rawResponseMs = Math.min(this.responseMs || 1000, 60 * 60 * 1000);
+    const settings = await getSettings();
+    const includeTiming = rawResponseMs <= settings.idleTimeoutSeconds * 1000;
+    const responseMs = includeTiming ? rawResponseMs : 0;
     const requestId = uid('req');
     const historyId = uid('history');
-    const times = [...this.currentCard.stats.lastTimesMs, responseMs].slice(-10);
+    const times = includeTiming ? [...this.currentCard.stats.lastTimesMs, rawResponseMs].slice(-10) : [...this.currentCard.stats.lastTimesMs];
+    const fastestMs = includeTiming
+      ? (this.currentCard.stats.fastestMs === null ? rawResponseMs : Math.min(this.currentCard.stats.fastestMs, rawResponseMs))
+      : this.currentCard.stats.fastestMs;
     const updated: StudyCard = {
       ...this.currentCard,
       schedule: result.state,
@@ -233,7 +242,7 @@ export class ReviewController {
         correct: this.currentCard.stats.correct + (isCorrect ? 1 : 0),
         incorrect: this.currentCard.stats.incorrect + (isCorrect ? 0 : 1),
         totalTimeMs: this.currentCard.stats.totalTimeMs + responseMs,
-        fastestMs: this.currentCard.stats.fastestMs === null ? responseMs : Math.min(this.currentCard.stats.fastestMs, responseMs),
+        fastestMs,
         lastTimesMs: times
       },
       updatedAt: now.toISOString(),
@@ -243,6 +252,7 @@ export class ReviewController {
     const history: ReviewHistory = {
       id: historyId,
       cardId: updated.id,
+      cardNumberSnapshot: updated.cardNumber ?? '',
       questionSnapshot: updated.question,
       tags: [...updated.tags],
       rating,

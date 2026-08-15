@@ -10,6 +10,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./compat.css">
   <title>Study Cards</title>
 </head>
 <body>
@@ -49,6 +50,7 @@
     </header>
     <main class="review-main">
       <div class="review-card" id="review-card">
+        <p id="review-number" class="review-number"></p>
         <p id="review-tags" class="tag-line"></p>
         <h2 id="review-question" class="review-question"></h2>
         <div id="choice-list" class="choice-list" hidden></div>
@@ -83,9 +85,10 @@
   </section>
 
   <dialog id="card-dialog" class="dialog">
-    <form id="card-form" method="dialog">
-      <div class="dialog-header"><h2 id="card-dialog-title">カードを追加</h2><button class="icon-button" value="cancel" aria-label="閉じる">×</button></div>
+    <form id="card-form">
+      <div class="dialog-header"><h2 id="card-dialog-title">カードを追加</h2><button id="card-close" class="icon-button" type="button" aria-label="閉じる">×</button></div>
       <input id="card-id" type="hidden">
+      <label>カード番号（任意）<input id="card-number" type="text" maxlength="100" inputmode="text" autocomplete="off" placeholder="例：12 / A-03 / 英単語-25"></label>
       <label>問題<textarea id="card-question" required maxlength="5000" rows="4"></textarea></label>
       <label>正解<textarea id="card-answer" required maxlength="5000" rows="3"></textarea></label>
       <div class="grid-3">
@@ -97,20 +100,20 @@
       <label>タグ（カンマ区切り）<input id="card-tags" placeholder="数学, 図形"></label>
       <label class="check-row"><input id="card-favorite" type="checkbox">お気に入り</label>
       <p id="card-form-error" class="form-error" role="alert"></p>
-      <div class="dialog-actions"><button value="cancel" class="secondary-button">キャンセル</button><button id="card-save" value="default" class="primary-button">保存</button></div>
+      <div class="dialog-actions"><button id="card-cancel" type="button" class="secondary-button">キャンセル</button><button id="card-save" type="submit" class="primary-button">保存</button></div>
     </form>
   </dialog>
 
   <dialog id="study-dialog" class="dialog compact">
-    <form id="study-form" method="dialog">
-      <div class="dialog-header"><h2>学習を開始</h2><button class="icon-button" value="cancel" aria-label="閉じる">×</button></div>
+    <form id="study-form">
+      <div class="dialog-header"><h2>学習を開始</h2><button id="study-close" class="icon-button" type="button" aria-label="閉じる">×</button></div>
       <label>学習モード<select id="study-mode">
         <option value="due">今日の復習</option><option value="new">新規カード</option><option value="weak">苦手カード</option><option value="wrong">最近の間違い</option><option value="favorite">お気に入り</option><option value="random">ランダム</option><option value="tag">タグ指定</option><option value="exam">試験モード</option>
       </select></label>
       <label>回答方法<select id="study-style"><option value="self">自己評価</option><option value="choice">選択問題</option></select></label>
       <label>タグ<select id="study-tag"><option value="">すべて</option></select></label>
       <label>試験問題数<select id="study-size"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label>
-      <div class="dialog-actions"><button value="cancel" class="secondary-button">キャンセル</button><button id="study-start" value="default" class="primary-button">開始</button></div>
+      <div class="dialog-actions"><button id="study-cancel" type="button" class="secondary-button">キャンセル</button><button id="study-start" type="submit" class="primary-button">開始</button></div>
     </form>
   </dialog>
 

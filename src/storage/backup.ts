@@ -22,9 +22,10 @@ export async function exportJson(): Promise<void> {
 }
 
 export async function exportCsv(): Promise<void> {
-  const header = ['ID', 'Question', 'Answer', 'Distractor1', 'Distractor2', 'Distractor3', 'Explanation', 'Tags', 'Favorite', 'CreatedAt', 'UpdatedAt'];
+  const header = ['ID', 'CardNumber', 'Question', 'Answer', 'Distractor1', 'Distractor2', 'Distractor3', 'Explanation', 'Tags', 'Favorite', 'CreatedAt', 'UpdatedAt'];
   const rows = (await getCards()).map((card) => [
     card.id,
+    card.cardNumber ?? '',
     card.question,
     card.answer,
     card.distractors[0] ?? '',

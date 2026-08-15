@@ -22,6 +22,7 @@ export interface CardStats {
 
 export interface StudyCard {
   id: string;
+  cardNumber?: string;
   question: string;
   answer: string;
   distractors: string[];
@@ -40,6 +41,7 @@ export interface StudyCard {
 export interface ReviewHistory {
   id: string;
   cardId: string;
+  cardNumberSnapshot?: string;
   questionSnapshot: string;
   tags: string[];
   rating: Rating;

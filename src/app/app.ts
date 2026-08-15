@@ -153,7 +153,7 @@ export class App {
     const cards = (await getCards()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     const wrapper = el('section');
     const searchRow = el('div', { className: 'search-row' });
-    const search = el('input', { attrs: { type: 'search', placeholder: '問題・答え・解説・タグを検索', 'aria-label': 'カードを検索' } });
+    const search = el('input', { attrs: { type: 'search', placeholder: '番号・問題・答え・解説・タグを検索', 'aria-label': 'カードを検索' } });
     const tagButton = button('タグ学習');
     tagButton.addEventListener('click', () => void this.openStudyDialog('tag'));
     searchRow.append(search, tagButton);
@@ -164,7 +164,7 @@ export class App {
     const draw = (query = '') => {
       clear(list);
       const normalized = query.trim().toLowerCase();
-      const filtered = cards.filter((card) => !normalized || [card.question, card.answer, card.explanation, ...card.tags].join('\n').toLowerCase().includes(normalized));
+      const filtered = cards.filter((card) => !normalized || [card.cardNumber ?? '', card.question, card.answer, card.explanation, ...card.tags].join('\n').toLowerCase().includes(normalized));
       if (!filtered.length) {
         list.append(el('p', { className: 'empty', text: cards.length ? '該当するカードがありません。' : 'まだカードがありません。「＋」から追加できます。' }));
         return;
@@ -178,6 +178,7 @@ export class App {
   private cardRow(card: StudyCard): HTMLElement {
     const row = el('article', { className: 'card-row' });
     const content = el('div');
+    if (card.cardNumber) content.append(el('p', { className: 'card-number', text: `No. ${card.cardNumber}` }));
     const title = el('h3', { text: card.question });
     const answer = el('p', { text: `答え：${card.answer}` });
     content.append(title, answer);
@@ -364,6 +365,7 @@ export class App {
 
   private async openCardDialog(card?: StudyCard): Promise<void> {
     byId<HTMLInputElement>('card-id').value = card?.id ?? '';
+    byId<HTMLInputElement>('card-number').value = card?.cardNumber ?? '';
     byId<HTMLTextAreaElement>('card-question').value = card?.question ?? '';
     byId<HTMLTextAreaElement>('card-answer').value = card?.answer ?? '';
     byId<HTMLInputElement>('card-wrong-1').value = card?.distractors[0] ?? '';
@@ -379,6 +381,7 @@ export class App {
 
   private cardDraftFromForm(): CardDraft {
     return {
+      cardNumber: byId<HTMLInputElement>('card-number').value,
       question: byId<HTMLTextAreaElement>('card-question').value,
       answer: byId<HTMLTextAreaElement>('card-answer').value,
       distractors: [byId<HTMLInputElement>('card-wrong-1').value, byId<HTMLInputElement>('card-wrong-2').value, byId<HTMLInputElement>('card-wrong-3').value],
@@ -413,6 +416,7 @@ export class App {
       const requestId = uid('req');
       const updated: StudyCard = {
         ...original,
+        cardNumber: draft.cardNumber?.trim() ?? '',
         question: draft.question.trim(),
         answer: draft.answer.trim(),
         distractors: draft.distractors.map((value) => value.trim()).filter(Boolean).slice(0, 3),

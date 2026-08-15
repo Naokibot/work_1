@@ -4,6 +4,7 @@ import { nowIso, normalizeTags, uid } from '../utils/core.js';
 import { saveCard, saveQueueItem } from '../storage/db.js';
 
 export interface CardDraft {
+  cardNumber?: string;
   question: string;
   answer: string;
   distractors: string[];
@@ -16,6 +17,7 @@ export function createCard(draft: CardDraft, now = new Date()): StudyCard {
   const timestamp = now.toISOString();
   return {
     id: uid('card'),
+    cardNumber: draft.cardNumber?.trim() ?? '',
     question: draft.question.trim(),
     answer: draft.answer.trim(),
     distractors: draft.distractors.map((value) => value.trim()).filter(Boolean).slice(0, 3),
@@ -35,6 +37,7 @@ export function validateCardDraft(draft: CardDraft): string[] {
   const errors: string[] = [];
   if (!draft.question.trim()) errors.push('問題文を入力してください。');
   if (!draft.answer.trim()) errors.push('正解を入力してください。');
+  if ((draft.cardNumber?.length ?? 0) > 100) errors.push('カード番号は100文字以内にしてください。');
   if (draft.question.length > 5000) errors.push('問題文は5000文字以内にしてください。');
   if (draft.answer.length > 5000) errors.push('正解は5000文字以内にしてください。');
   if (draft.explanation.length > 10000) errors.push('解説は10000文字以内にしてください。');

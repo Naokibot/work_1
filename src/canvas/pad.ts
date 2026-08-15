@@ -16,7 +16,7 @@ export class ScratchPad {
   private redoStack: Stroke[] = [];
   private active: Stroke | null = null;
   private eraser = false;
-  private resizeObserver: ResizeObserver;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -28,8 +28,13 @@ export class ScratchPad {
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointercancel', this.onPointerUp);
-    this.resizeObserver = new ResizeObserver(() => this.resize());
-    this.resizeObserver.observe(canvas);
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.resize());
+      this.resizeObserver.observe(canvas);
+    } else {
+      window.addEventListener('resize', this.onWindowResize);
+      window.addEventListener('orientationchange', this.onWindowResize);
+    }
     this.resize();
   }
 
@@ -59,12 +64,18 @@ export class ScratchPad {
   }
 
   destroy(): void {
-    this.resizeObserver.disconnect();
+    this.resizeObserver?.disconnect();
+    window.removeEventListener('resize', this.onWindowResize);
+    window.removeEventListener('orientationchange', this.onWindowResize);
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerup', this.onPointerUp);
     this.canvas.removeEventListener('pointercancel', this.onPointerUp);
   }
+
+  private readonly onWindowResize = (): void => {
+    this.resize();
+  };
 
   private resize(): void {
     const rect = this.canvas.getBoundingClientRect();
@@ -80,7 +91,8 @@ export class ScratchPad {
 
   private readonly onPointerDown = (event: PointerEvent): void => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    this.canvas.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    if (typeof this.canvas.setPointerCapture === 'function') this.canvas.setPointerCapture(event.pointerId);
     this.redoStack = [];
     this.active = { points: [this.point(event)], eraser: this.eraser };
     this.strokes.push(this.active);
@@ -88,7 +100,9 @@ export class ScratchPad {
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
-    if (!this.active || !this.canvas.hasPointerCapture(event.pointerId)) return;
+    if (!this.active) return;
+    if (typeof this.canvas.hasPointerCapture === 'function' && !this.canvas.hasPointerCapture(event.pointerId)) return;
+    event.preventDefault();
     const coalesced = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [event];
     for (const item of coalesced) this.active.points.push(this.point(item));
     this.redraw();
@@ -96,7 +110,9 @@ export class ScratchPad {
 
   private readonly onPointerUp = (event: PointerEvent): void => {
     if (!this.active) return;
-    if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId);
+    if (typeof this.canvas.hasPointerCapture === 'function' && this.canvas.hasPointerCapture(event.pointerId) && typeof this.canvas.releasePointerCapture === 'function') {
+      this.canvas.releasePointerCapture(event.pointerId);
+    }
     this.active = null;
   };
 

@@ -1,0 +1,36 @@
+name: Fix latest Anki package filename
+
+on:
+  push:
+    branches:
+      - agent/anki-parity-rewrite-20260815
+    paths:
+      - .github/workflows/fix-latest-anki-package.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Match official latest package filename
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/anki/anki-package.ts')
+          source = path.read_text()
+          old = "collection.21b"
+          count = source.count(old)
+          if count != 2:
+              raise SystemExit(f'expected 2 occurrences, found {count}')
+          path.write_text(source.replace(old, "collection.anki21b"))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "Hotaru(Naokibot)"
+          git config user.email "sagakatsuyuki.555@gmail.com"
+          git add src/anki/anki-package.ts
+          git commit -m "match official latest Anki package filename"
+          git push origin HEAD:agent/anki-parity-rewrite-20260815

@@ -68,7 +68,7 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     await page.locator('#add-card-button').click();
     await page.waitForSelector('#card-dialog[open]');
     const typeNames = await page.locator('#note-type option').allTextContents();
-    assert.ok(typeNames.some((value) => value.includes('Basic')), `${name}: built-in Basic note type`);
+    assert.ok(typeNames.some((value) => value.includes('基本')), `${name}: built-in basic note type is localized`);
     await page.locator('textarea[data-field="Front"]').fill('Capital of Japan?');
     await page.locator('textarea[data-field="Back"]').fill('Tokyo');
     await page.locator('#note-tags').fill('geography asia');
@@ -99,7 +99,7 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     await page.locator('[data-route="anki"]').click();
     await page.waitForFunction(() => document.getElementById('view')?.textContent?.includes('ブラウザ / 高度な検索'));
     const browserText = await page.locator('#view').innerText();
-    for (const heading of ['ブラウザ / 高度な検索', 'フィルターデッキ / Custom Study', 'ノートタイプ / フィールド / カードテンプレート', 'FSRS-6 / デッキオプション']) assert.ok(browserText.includes(heading), `${name}: ${heading}`);
+    for (const heading of ['ブラウザ / 高度な検索', 'フィルターデッキ / カスタム学習', 'ノートタイプ / フィールド / カードテンプレート', 'FSRS-6 / デッキオプション']) assert.ok(browserText.includes(heading), `${name}: ${heading}`);
     assert.ok(browserText.includes('Capital of Japan?'), `${name}: generated note searchable`);
 
     stage = 'apkg-roundtrip';
@@ -127,9 +127,9 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     const beforeIoCards = await indexedCount(page, 'cards');
     await page.locator('#add-card-button').click();
     await page.waitForSelector('#card-dialog[open]');
-    await page.locator('#note-type').selectOption({ label: 'Image Occlusion' });
+    await page.locator('#note-type').selectOption({ label: '画像穴埋め' });
     await page.locator('#note-type').dispatchEvent('change');
-    await page.getByRole('button', { name: 'Image Occlusionエディタを開く' }).click();
+    await page.getByRole('button', { name: '画像穴埋めエディタを開く' }).click();
     await page.waitForSelector('.io-editor-dialog[open]');
     const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="white"/><circle cx="300" cy="200" r="80" fill="black"/></svg>');
     await page.locator('.io-editor-dialog input[type="file"]').setInputFiles({ name: 'diagram.svg', mimeType: 'image/svg+xml', buffer: svg });

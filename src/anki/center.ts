@@ -46,6 +46,8 @@ import {
 } from './collection.js';
 import { searchCards } from './search.js';
 import { DEFAULT_DECK_ID, IMAGE_OCCLUSION_NOTE_TYPE_ID } from './defaults.js';
+import { noteFieldDisplayName, noteTypeDisplayName, noteTypeKindDisplayName } from './localization.js';
+import { exportAnkiPackage } from './anki-package.js';
 import { downloadText, nowIso, uid } from '../utils/core.js';
 import { evaluateFsrs, minimumRecommendedRetention, optimizeFsrsParameters, rescheduleForRetention } from './fsrs-tools.js';
 
@@ -81,6 +83,12 @@ function labeledTextarea(labelText: string, value = '', rows = 4): { label: HTML
 function selectFrom<T extends { id: string; name: string }>(items: T[], value?: string): HTMLSelectElement {
   const select = el('select');
   for (const item of items) select.append(new Option(item.name, item.id, false, item.id === value));
+  return select;
+}
+
+function selectNoteTypes(items: NoteTypeDefinition[], value?: string): HTMLSelectElement {
+  const select = el('select');
+  for (const item of items) select.append(new Option(noteTypeDisplayName(item), item.id, false, item.id === value));
   return select;
 }
 
@@ -207,7 +215,7 @@ export class AnkiCenter {
     const underline=button('U','small-button');underline.addEventListener('click',()=>wrap('<u>','</u>'));
     const math=button('MathJax','small-button');math.addEventListener('click',()=>wrap('\\(','\\)'));
     const latex=button('LaTeX','small-button');latex.addEventListener('click',()=>wrap('[latex]','[/latex]'));
-    const clozeButton=button('Cloze','small-button');clozeButton.hidden=!cloze;clozeButton.addEventListener('click',()=>wrap('{{c1::','}}'));
+    const clozeButton=button('穴埋め','small-button');clozeButton.hidden=!cloze;clozeButton.addEventListener('click',()=>wrap('{{c1::','}}'));
     const attach=button('画像/音声/動画','small-button');const file=el('input',{attrs:{type:'file',accept:'image/*,audio/*,video/*'}});file.hidden=true;attach.addEventListener('click',()=>file.click());file.addEventListener('change',()=>void(async()=>{const f=file.files?.[0];if(!f)return;if(f.size>15*1024*1024){this.callbacks.showStatus('メディアは15MB以内にしてください。',true);return;}const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result??''));reader.onerror=()=>reject(reader.error);reader.readAsDataURL(f)});const tag=f.type.startsWith('image/')?`<img src="${data}" alt="${f.name}">`:f.type.startsWith('audio/')?`<audio controls src="${data}"></audio>`:`<video controls playsinline src="${data}"></video>`;const pos=textarea.selectionStart;textarea.value=textarea.value.slice(0,pos)+tag+textarea.value.slice(textarea.selectionEnd);file.value='';})());
     toolbar.append(bold,italic,underline,math,latex,clozeButton,attach,file);
     if(typeof MediaRecorder!=='undefined'&&navigator.mediaDevices?.getUserMedia){const record=button('録音','small-button');let recorder:MediaRecorder|null=null,chunks:BlobPart[]=[];record.addEventListener('click',()=>void(async()=>{if(recorder&&recorder.state==='recording'){recorder.stop();record.textContent='録音';return;}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];recorder=new MediaRecorder(stream);recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=>{const blob=new Blob(chunks,{type:recorder?.mimeType||'audio/webm'});const reader=new FileReader();reader.onload=()=>{textarea.value+=`<audio controls src="${String(reader.result??'')}"></audio>`};reader.readAsDataURL(blob);stream.getTracks().forEach(t=>t.stop())};recorder.start();record.textContent='停止';}catch{this.callbacks.showStatus('マイクを利用できませんでした。',true);}}));toolbar.append(record)}
@@ -232,7 +240,7 @@ export class AnkiCenter {
   }
 
   private renderOverview(state: AnkiState, cards: StudyCard[], historyCount: number): HTMLElement {
-    const node = section('Anki互換センター', 'デッキ、ノートタイプ、テンプレート、Cloze、画像穴埋め、検索、フィルターデッキ、FSRS設定、バックアップ等を管理します。');
+    const node = section('Anki互換センター', 'デッキ、ノートタイプ、テンプレート、穴埋め、画像穴埋め、検索、フィルターデッキ、FSRS設定、バックアップ等を管理します。');
     const noteCount = state.notes.filter((note) => note.profileId === state.activeProfileId && !note.deletedAt).length;
     const metrics = el('div', { className: 'metric-grid' });
     const metric = (value: string, label: string) => { const m = el('div', { className: 'metric' }); m.append(el('strong', { text: value }), el('span', { text: label })); return m; };
@@ -268,6 +276,8 @@ export class AnkiCenter {
         const name = window.prompt('サブデッキ名', ''); if (!name) return;
         await createDeck(name, deck.id); await this.callbacks.refresh();
       })());
+      const exportDeck = button('書き出し', 'small-button');
+      exportDeck.addEventListener('click', () => void exportAnkiPackage(deck.id).then(() => this.callbacks.showStatus(`${deck.name} をAnki形式で書き出しました。`)).catch((error) => this.callbacks.showStatus(error instanceof Error ? error.message : '書き出しに失敗しました。', true)));
       const rename = button('名前変更', 'small-button');
       rename.addEventListener('click', () => void (async () => {
         const name = window.prompt('新しいデッキ名', deck.name); if (!name || name === deck.name) return;
@@ -281,7 +291,7 @@ export class AnkiCenter {
         })());
         actions.append(remove);
       }
-      actions.prepend(study, child, rename);
+      actions.prepend(study, child, rename, exportDeck);
       item.append(info, actions);
       list.append(item);
     }
@@ -307,9 +317,9 @@ export class AnkiCenter {
   }
 
   private renderAddNote(state: AnkiState): HTMLElement {
-    const node = section('ノートを追加', 'Basic / Reverse / Type Answer / Cloze / Image Occlusion / カスタムノートタイプに対応します。');
+    const node = section('ノートを追加', '基本 / 表裏カード / 解答入力 / 穴埋め / 画像穴埋め / カスタムノートタイプに対応します。');
     const typeLabel = el('label', { text: 'ノートタイプ' });
-    const typeSelect = selectFrom(state.noteTypes);
+    const typeSelect = selectNoteTypes(state.noteTypes);
     typeLabel.append(typeSelect);
     const deckLabel = el('label', { text: 'デッキ' });
     const deckSelect = selectFrom(state.decks.filter((deck) => deck.profileId === state.activeProfileId), DEFAULT_DECK_ID);
@@ -326,11 +336,11 @@ export class AnkiCenter {
       if (type.kind === 'image-occlusion') {
         ioEditor = new ImageOcclusionEditor();
         fields.append(ioEditor.root);
-        const extra = labeledTextarea('Extra', '', 3); extra.textarea.dataset.field = 'Extra'; fields.append(extra.label);
+        const extra = labeledTextarea('補足', '', 3); extra.textarea.dataset.field = 'Extra'; fields.append(extra.label);
         return;
       }
       for (const field of type.fields) {
-        const control = labeledTextarea(field.name, '', field.name.toLowerCase().includes('text') ? 6 : 3);
+        const control = labeledTextarea(noteFieldDisplayName(field.name), '', field.name.toLowerCase().includes('text') ? 6 : 3);
         control.textarea.dataset.field = field.name;
         if (field.name === 'Add Reverse') { control.textarea.placeholder = '逆向きカードを作る場合は何か入力'; }
         const isCloze=type.kind === 'cloze' && field.name.toLowerCase() === 'text';
@@ -471,7 +481,7 @@ export class AnkiCenter {
   }
 
   private renderFilteredDecks(state: AnkiState): HTMLElement {
-    const node = section('フィルターデッキ / Custom Study');
+    const node = section('フィルターデッキ / カスタム学習');
     const name = labeledInput('名前', 'Filtered Deck');
     const query = labeledInput('検索条件', 'is:due');
     const limit = labeledInput('上限', '100', 'number');
@@ -508,7 +518,7 @@ export class AnkiCenter {
   private renderNoteTypes(state: AnkiState): HTMLElement {
     const node = section('ノートタイプ / フィールド / カードテンプレート');
     const baseLabel = el('label', { text: '複製元' });
-    const base = selectFrom(state.noteTypes); baseLabel.append(base);
+    const base = selectNoteTypes(state.noteTypes); baseLabel.append(base);
     const name = labeledInput('新しいノートタイプ名', 'Custom');
     const fields = labeledInput('フィールド（カンマ区切り）', 'Front,Back,Extra');
     const front = labeledTextarea('表テンプレート', '{{Front}}', 4);
@@ -533,7 +543,7 @@ export class AnkiCenter {
     const list = el('div', { className: 'anki-list' });
     for (const type of state.noteTypes) {
       const row = el('div', { className: 'anki-row' });
-      const info = el('div'); info.append(el('strong', { text: type.name }), el('p', { className: 'help', text: `${type.kind} · ${type.fields.map((field) => field.name).join(', ')} · ${type.templates.length} template(s)` }));
+      const info = el('div'); info.append(el('strong', { text: noteTypeDisplayName(type) }), el('p', { className: 'help', text: `${noteTypeKindDisplayName(type.kind)} · ${type.fields.map((field) => noteFieldDisplayName(field.name)).join(', ')} · テンプレート${type.templates.length}件` }));
       const actions = el('div', { className: 'row-actions' });
       if (!type.builtin) {
         const remove = button('削除', 'small-button');
@@ -636,6 +646,8 @@ export class AnkiCenter {
   private async renderBackupAndImport(state: AnkiState): Promise<HTMLElement> {
     const node = section('インポート / エクスポート / 自動バックアップ', 'JSONコレクション、CSV/TSV、定期スナップショットに対応します。');
     const actions = el('div', { className: 'button-row' });
+    const ankiImport = button('Ankiデッキを読み込む (.apkg/.colpkg)'); ankiImport.addEventListener('click', () => (document.getElementById('import-file') as HTMLInputElement | null)?.click());
+    const ankiExport = button('コレクションをAnki形式で書き出す (.apkg)'); ankiExport.addEventListener('click', () => void exportAnkiPackage().then(() => this.callbacks.showStatus('コレクションをAnki形式で書き出しました。')).catch((error) => this.callbacks.showStatus(error instanceof Error ? error.message : '書き出しに失敗しました。', true)));
     const exportButton = button('コレクションを書き出す');
     exportButton.addEventListener('click', () => void (async () => downloadText(`work-1-collection-${nowIso().slice(0,10)}.json`, await exportCollectionPackage(), 'application/json'))());
     const importButton = button('コレクションを読み込む');
@@ -659,7 +671,7 @@ export class AnkiCenter {
     })());
     const backup = button('今すぐバックアップ');
     backup.addEventListener('click', () => void (async () => { await createSnapshot('manual', 'Manual backup'); this.callbacks.showStatus('バックアップを作成しました。'); await this.callbacks.refresh(); })());
-    actions.append(exportButton, importButton, importFile, textButton, textFile, backup); node.append(actions);
+    actions.append(ankiImport, ankiExport, exportButton, importButton, importFile, textButton, textFile, backup); node.append(actions);
     const snapshots = await getSnapshots();
     const list = el('div', { className: 'anki-list' });
     snapshots.slice(0, 12).forEach((snapshot) => {

@@ -21,8 +21,8 @@ This audit compares `work_1` with the current Anki desktop manual and the verifi
 - Local profiles.
 - Local automatic snapshots and manual JSON backups.
 - Media attachment and browser-supported recording.
-- Current `.colpkg` / `.apkg` import paths plus legacy-compatible `.apkg` export.
-- IndexedDB persistence, offline PWA cache and same-device session/history persistence.
+- Current `.colpkg` / `.apkg` import paths plus legacy-compatible full-collection and per-deck `.apkg` export.
+- Japanese-localized stock note-type UI, IndexedDB persistence, offline PWA cache and same-device session/history persistence.
 - Optional Google Apps Script / Google Sheets sync for the app's supported schema.
 - Chromium and WebKit acceptance testing.
 - Official-Anki-generated current package interoperability testing.

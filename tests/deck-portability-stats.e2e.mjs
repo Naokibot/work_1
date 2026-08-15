@@ -38,6 +38,7 @@ async function run(name, engine) {
     const page=await context.newPage(); await page.goto(url,{waitUntil:'networkidle'}); await page.waitForSelector('.main-toolbar');
 
     await page.locator('#add-card-button').click();
+    await page.waitForSelector('#card-dialog[open]');
     const optionLabels=await page.locator('#note-type option').allTextContents();
     for(const expected of ['基本','基本（表裏2枚）','基本（任意で表裏2枚）','基本（解答入力）','穴埋め','画像穴埋め']) assert.ok(optionLabels.includes(expected),`${name}: Japanese note type ${expected}`);
     assert.ok(await page.getByLabel('表面').isVisible(),`${name}: Front field localized`);
@@ -49,6 +50,7 @@ async function run(name, engine) {
     await page.waitForFunction(()=>document.getElementById('view')?.textContent?.includes('書き出しテスト'));
 
     await page.locator('#add-card-button').click();
+    await page.waitForSelector('#card-dialog[open]');
     await page.locator('#note-deck').selectOption({label:'書き出しテスト'});
     await page.getByLabel('表面').fill('書き出し問題');
     await page.getByLabel('裏面').fill('書き出し答え');

@@ -195,11 +195,26 @@ async function testEngine(name, engine) {
     const csvDownload=page.waitForEvent('download'); await page.getByRole('button',{name:'CSV',exact:true}).click(); const csvFile=await csvDownload; assert.ok(jsonFile && csvFile.suggestedFilename().endsWith('.csv'),`${name}: CSV export`);
 
     stage='sync-mocked-transport';
-    await page.route('https://script.google.com/**', async route=>{
-      const request=route.request();
-      if(request.method()==='POST') return route.fulfill({status:200,contentType:'text/plain',body:'ok'});
-      const u=new URL(request.url()); const cb=u.searchParams.get('callback');
-      return route.fulfill({status:200,contentType:'application/javascript',body:`${cb}(${JSON.stringify({ok:true,serverTime:new Date().toISOString(),cards:[],history:[],syncResults:[]})});`});
+    await page.evaluate(() => {
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const target = typeof input === 'string' ? input : input.url;
+        if (target.startsWith('https://script.google.com/macros/s/')) return new Response('', { status: 200 });
+        return nativeFetch(input, init);
+      };
+      const nativeAppend = Element.prototype.appendChild;
+      Element.prototype.appendChild = function(node) {
+        if (this === document.head && node instanceof HTMLScriptElement && node.src.startsWith('https://script.google.com/macros/s/')) {
+          const callback = new URL(node.src).searchParams.get('callback');
+          setTimeout(() => {
+            if (callback && typeof window[callback] === 'function') {
+              window[callback]({ ok:true, serverTime:new Date().toISOString(), cards:[], history:[], syncResults:[] });
+            }
+          }, 0);
+          return node;
+        }
+        return nativeAppend.call(this, node);
+      };
     });
     await page.evaluate(async()=>{const db=await import('./assets/storage/db.js');const s=await db.getSettings();await db.saveSettings({...s,gasUrl:'https://script.google.com/macros/s/abcdefghijklmnop/exec',syncSecret:'0123456789abcdef',autoSync:false});});
     await page.locator('#sync-button').click();

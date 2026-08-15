@@ -202,18 +202,19 @@ async function testEngine(name, engine) {
         if (target.startsWith('https://script.google.com/macros/s/')) return new Response('', { status: 200 });
         return nativeFetch(input, init);
       };
-      const nativeAppend = Element.prototype.appendChild;
-      Element.prototype.appendChild = function(node) {
-        if (this === document.head && node instanceof HTMLScriptElement && node.src.startsWith('https://script.google.com/macros/s/')) {
-          const callback = new URL(node.src).searchParams.get('callback');
+      const nativeAppend = Element.prototype.append;
+      Element.prototype.append = function(...nodes) {
+        const intercepted = this === document.head && nodes.find(node => node instanceof HTMLScriptElement && node.src.startsWith('https://script.google.com/macros/s/'));
+        if (intercepted) {
+          const callback = new URL(intercepted.src).searchParams.get('callback');
           setTimeout(() => {
             if (callback && typeof window[callback] === 'function') {
               window[callback]({ ok:true, serverTime:new Date().toISOString(), cards:[], history:[], syncResults:[] });
             }
           }, 0);
-          return node;
+          return;
         }
-        return nativeAppend.call(this, node);
+        return nativeAppend.apply(this, nodes);
       };
     });
     await page.evaluate(async()=>{const db=await import('./assets/storage/db.js');const s=await db.getSettings();await db.saveSettings({...s,gasUrl:'https://script.google.com/macros/s/abcdefghijklmnop/exec',syncSecret:'0123456789abcdef',autoSync:false});});

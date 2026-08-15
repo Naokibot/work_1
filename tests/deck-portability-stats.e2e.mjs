@@ -41,8 +41,8 @@ async function run(name, engine) {
     await page.waitForSelector('#card-dialog[open]');
     const optionLabels=await page.locator('#note-type option').allTextContents();
     for(const expected of ['基本','基本（表裏2枚）','基本（任意で表裏2枚）','基本（解答入力）','穴埋め','画像穴埋め']) assert.ok(optionLabels.includes(expected),`${name}: Japanese note type ${expected}`);
-    assert.ok(await page.getByLabel('表面').isVisible(),`${name}: Front field localized`);
-    assert.ok(await page.getByLabel('裏面').isVisible(),`${name}: Back field localized`);
+    assert.ok(await page.getByRole('textbox',{name:'表面',exact:true}).isVisible(),`${name}: Front field localized`);
+    assert.ok(await page.getByRole('textbox',{name:'裏面',exact:true}).isVisible(),`${name}: Back field localized`);
     await page.locator('#card-close').click();
 
     page.once('dialog',(dialog)=>dialog.accept('書き出しテスト'));
@@ -52,8 +52,8 @@ async function run(name, engine) {
     await page.locator('#add-card-button').click();
     await page.waitForSelector('#card-dialog[open]');
     await page.locator('#note-deck').selectOption({label:'書き出しテスト'});
-    await page.getByLabel('表面').fill('書き出し問題');
-    await page.getByLabel('裏面').fill('書き出し答え');
+    await page.getByRole('textbox',{name:'表面',exact:true}).fill('書き出し問題');
+    await page.getByRole('textbox',{name:'裏面',exact:true}).fill('書き出し答え');
     await page.locator('#card-save').click();
     await page.waitForFunction(()=>document.getElementById('status-message')?.textContent?.includes('カードを追加'));
     await page.locator('#card-close').click();

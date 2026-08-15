@@ -1,0 +1,36 @@
+name: Fix home deck navigation
+
+on:
+  push:
+    branches:
+      - agent/easier-decks-card-numbers-fsrs
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/easier-decks-card-numbers-fsrs
+      - name: Clear selected deck on explicit top navigation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/app/app.ts')
+          s=p.read_text()
+          old="    this.route = route;\n    if (route !== 'home') this.selectedDeckId = null;"
+          new="    this.route = route;\n    this.selectedDeckId = null;"
+          if old not in s: raise SystemExit('target not found')
+          p.write_text(s.replace(old,new))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/app.ts
+          git commit -m "fix returning from deck overview to deck list"
+          git push origin HEAD:agent/easier-decks-card-numbers-fsrs

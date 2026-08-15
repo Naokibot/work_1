@@ -10,7 +10,8 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
-  <title>Study Cards</title>
+  <link rel="stylesheet" href="./anki-desktop.css">
+  <title>Study Cards — Anki-compatible</title>
 </head>
 <body>
   <div id="app-shell" class="anki-window">
@@ -24,13 +25,13 @@
         <span id="profile-label" class="profile-label"></span>
       </div>
       <div class="main-toolbar" role="toolbar" aria-label="メインツールバー">
-        <button type="button" data-route="home" class="toolbar-button is-active" title="デッキ"><span class="toolbar-icon">▤</span><span>デッキ</span></button>
-        <button type="button" id="add-card-button" class="toolbar-button" title="追加"><span class="toolbar-icon">＋</span><span>追加</span></button>
-        <button type="button" data-route="anki" class="toolbar-button" title="ブラウザ"><span class="toolbar-icon">⌕</span><span>ブラウザ</span></button>
-        <button type="button" data-route="stats" class="toolbar-button" title="統計"><span class="toolbar-icon">▥</span><span>統計</span></button>
-        <button type="button" id="sync-button" class="toolbar-button sync-toolbar" title="同期"><span class="toolbar-icon">↻</span><span>同期</span><span id="sync-badge" class="badge" hidden>0</span></button>
+        <button type="button" data-route="home" class="toolbar-button is-active" title="デッキ (D)"><span class="toolbar-icon">▤</span><span>デッキ</span></button>
+        <button type="button" id="add-card-button" class="toolbar-button" title="追加 (A)"><span class="toolbar-icon">＋</span><span>追加</span></button>
+        <button type="button" data-route="anki" class="toolbar-button" title="ブラウザ (B)"><span class="toolbar-icon">⌕</span><span>ブラウザ</span></button>
+        <button type="button" data-route="stats" class="toolbar-button" title="統計 (T)"><span class="toolbar-icon">▥</span><span>統計</span></button>
+        <button type="button" id="sync-button" class="toolbar-button sync-toolbar" title="同期 (Y)"><span class="toolbar-icon">↻</span><span>同期</span><span id="sync-badge" class="badge" hidden>0</span></button>
         <span class="toolbar-separator"></span>
-        <button type="button" data-route="settings" class="toolbar-button" title="設定"><span class="toolbar-icon">⚙</span><span>設定</span></button>
+        <button type="button" data-route="settings" class="toolbar-button" title="設定 (P)"><span class="toolbar-icon">⚙</span><span>設定</span></button>
       </div>
     </header>
     <h1 id="page-title" class="sr-only">デッキ</h1>
@@ -88,5 +89,6 @@
   <script defer src="./vendor/sql-wasm.js"></script>
   <script defer src="./vendor/mathjax.js"></script>
   <script type="module" src="./assets/main.js"></script>
+  <script type="module" src="./assets/exact-ui.js"></script>
 </body>
 </html>

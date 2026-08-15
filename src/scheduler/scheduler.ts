@@ -100,13 +100,12 @@ function recallStability(difficulty: number, stability: number, r: number, grade
 }
 
 function forgetStability(difficulty: number, stability: number, r: number, w: readonly number[]): number {
-  return Math.max(
-    0.01,
-    Number(w[11] ?? 1.4835)
-      * Math.pow(Math.max(difficulty, 1), -Number(w[12] ?? 0.0614))
-      * (Math.pow(Math.max(stability, 0) + 1, Number(w[13] ?? 0.2629)) - 1)
-      * Math.exp(Number(w[14] ?? 1.6483) * (1 - r))
-  );
+  const longTerm = Number(w[11] ?? 1.4835)
+    * Math.pow(Math.max(difficulty, 1), -Number(w[12] ?? 0.0614))
+    * (Math.pow(Math.max(stability, 0) + 1, Number(w[13] ?? 0.2629)) - 1)
+    * Math.exp(Number(w[14] ?? 1.6483) * (1 - r));
+  const shortTermCap = Math.max(0.01, stability / Math.exp(Number(w[17] ?? 0.5425) * Number(w[18] ?? 0.0912)));
+  return Math.max(0.01, Math.min(longTerm, shortTermCap));
 }
 
 function learningDelayMinutes(steps: number[], step: number, rating: Rating): { minutes: number; nextStep: number | null } | null {
@@ -155,7 +154,7 @@ export function scheduleReview(previous: ScheduleState, rating: Rating, now = ne
   const relearningSteps = (options.relearningStepsMinutes ?? [10]).filter((n) => Number.isFinite(n) && n > 0);
   const isFirst = previous.reps === 0;
   const r = retrievability(previous, now, options);
-  let difficulty = isFirst ? initialDifficulty(grade, w) : nextDifficulty(previous.difficulty, grade, w);
+  let difficulty = isFirst ? initialDifficulty(grade, w) : previous.difficulty;
   let stability = isFirst ? Math.max(0.01, Number(w[grade - 1] ?? 1)) : previous.stability;
   let lapses = previous.lapses;
   let streak = previous.streak;
@@ -166,8 +165,9 @@ export function scheduleReview(previous: ScheduleState, rating: Rating, now = ne
   if (!isFirst) {
     const elapsed = elapsedDays(previous, now);
     if (elapsed < 1 && previous.stability > 0) stability = sameDayStability(previous.stability, grade, w);
-    else if (rating === 'again') stability = forgetStability(difficulty, previous.stability, r, w);
-    else stability = recallStability(difficulty, previous.stability, r, grade, w);
+    else if (rating === 'again') stability = forgetStability(previous.difficulty, previous.stability, r, w);
+    else stability = recallStability(previous.difficulty, previous.stability, r, grade, w);
+    difficulty = nextDifficulty(previous.difficulty, grade, w);
   }
 
   if (rating === 'again') {

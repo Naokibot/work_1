@@ -1,4 +1,5 @@
 import type { ReviewMode, ReviewSession, ReviewStyle, StudyCard } from '../types.js';
+import { refreshCardNumberOptions } from './card-number.js';
 import { exportAnkiPackage, importAnkiPackage } from '../anki/anki-package.js';
 import { AnkiCenter } from '../anki/center.js';
 import { cardsInDeck, createDeck, createNote, importCollectionPackage, importTextCards, initializeAnkiCollection } from '../anki/collection.js';
@@ -81,6 +82,7 @@ export class App {
     }));
     document.querySelectorAll<HTMLButtonElement>('[data-menu]').forEach((item) => item.addEventListener('click', () => this.handleMenu(item.dataset.menu ?? '')));
     this.addButton.addEventListener('click', () => void this.openAddDialog());
+    byId<HTMLButtonElement>('note-deck-create').addEventListener('click', () => void this.quickCreateDeck());
     this.syncButton.addEventListener('click', () => void this.performSync());
     this.cardForm.addEventListener('submit', (event) => void this.handleAddNote(event));
     this.studyForm.addEventListener('submit', (event) => void this.handleStudySubmit(event));
@@ -112,7 +114,7 @@ export class App {
 
   private async navigate(route: Route): Promise<void> {
     this.route = route;
-    if (route !== 'home') this.selectedDeckId = null;
+    this.selectedDeckId = null;
     document.querySelectorAll<HTMLButtonElement>('[data-route]').forEach((item) => item.classList.toggle('is-active', item.dataset.route === route));
     await this.render();
     this.view.focus({ preventScroll: true });
@@ -208,10 +210,27 @@ export class App {
   }
 
   private async promptCreateDeck(): Promise<void> {
-    const name = window.prompt('デッキ名');
+    const name = window.prompt('デッキ名（「親::子」でサブデッキも作れます）');
     if (!name?.trim()) return;
-    try { await createDeck(name.trim()); this.showStatus('デッキを作成しました。'); await this.refresh(); }
-    catch (error) { this.showStatus(error instanceof Error ? error.message : 'デッキを作成できませんでした。', true); }
+    try {
+      const created = await createDeck(name.trim());
+      this.selectedDeckId = created.id;
+      this.showStatus('デッキを作成しました。すぐにカードを追加できます。');
+      await this.render();
+    } catch (error) { this.showStatus(error instanceof Error ? error.message : 'デッキを作成できませんでした。', true); }
+  }
+
+  private async quickCreateDeck(): Promise<void> {
+    const name = window.prompt('新しいデッキ名（「親::子」でサブデッキも作れます）');
+    if (!name?.trim()) return;
+    try {
+      const created = await createDeck(name.trim());
+      const state = await getAnkiState();
+      const deck = byId<HTMLSelectElement>('note-deck');
+      deck.replaceChildren(...state.decks.filter((item) => item.profileId === state.activeProfileId).map((item) => new Option(item.name, item.id, false, item.id === created.id)));
+      deck.value = created.id;
+      this.showStatus(created.name + ' を作成して選択しました。');
+    } catch (error) { byId<HTMLElement>('card-form-error').textContent = error instanceof Error ? error.message : 'デッキを作成できませんでした。'; }
   }
 
   private async openAddDialog(): Promise<void> {
@@ -223,6 +242,7 @@ export class App {
     byId<HTMLInputElement>('note-tags').value = '';
     byId<HTMLElement>('card-form-error').textContent = '';
     await this.rebuildNoteFields();
+    await refreshCardNumberOptions();
     this.cardDialog.showModal();
   }
 
@@ -266,7 +286,7 @@ export class App {
       if (!type) throw new Error('ノートタイプが見つかりません。');
       if (type.kind === 'image-occlusion') throw new Error('画像穴埋めは専用エディタを使用してください。');
       const values: Record<string, string> = {};
-      byId<HTMLElement>('note-fields').querySelectorAll<HTMLTextAreaElement>('textarea[data-field]').forEach((input) => { values[input.dataset.field ?? ''] = input.value; });
+      byId<HTMLElement>('note-fields').querySelectorAll<HTMLTextAreaElement | HTMLSelectElement>('textarea[data-field], select[data-field]').forEach((input) => { values[input.dataset.field ?? ''] = input.value; });
       const first = type.fields[0]?.name; if (first && !values[first]?.trim()) throw new Error('最初のフィールドを入力してください。');
       const tags = byId<HTMLInputElement>('note-tags').value.split(/[\s,]+/).map((value) => value.trim()).filter(Boolean);
       const cards = await createNote({ profileId: state.activeProfileId, deckId: byId<HTMLSelectElement>('note-deck').value || DEFAULT_DECK_ID, noteTypeId: typeId, fields: values, tags });

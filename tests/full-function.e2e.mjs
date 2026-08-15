@@ -44,8 +44,8 @@ async function addDialogNote(page, { type='基本', deck='ReviewDeck', number=''
   await page.locator('#note-type').selectOption({ label:type });
   await page.locator('#note-type').dispatchEvent('change');
   if (deck) await page.locator('#note-deck').selectOption({ label:deck });
-  const numberInput=page.locator('textarea[data-field="__CardNumber"]');
-  if(number && await numberInput.count()) await numberInput.fill(number);
+  const numberInput=page.locator('select[data-field="__CardNumber"]');
+  if(number && await numberInput.count()) await numberInput.selectOption(number);
   for(const [name,value] of Object.entries(fields)) await page.locator(`textarea[data-field="${name}"]`).fill(value);
   await page.locator('#note-tags').fill(tags);
   await page.locator('#card-form').evaluate(form=>form.requestSubmit());
@@ -83,19 +83,19 @@ async function testEngine(name, engine) {
 
     stage='basic-card-create';
     const beforeBasic=await idb(page,'count','cards');
-    await addDialogNote(page,{number:'001',fields:{Front:'日本の首都は？',Back:'東京',Extra:'日本の首都です。'},tags:'geography japan'});
+    await addDialogNote(page,{number:'1',fields:{Front:'日本の首都は？',Back:'東京',Extra:'日本の首都です。'},tags:'geography japan'});
     const cardsAfterBasic=await idb(page,'cards');
     assert.equal(cardsAfterBasic.length,beforeBasic+1,`${name}: basic card generated`);
-    assert.ok(cardsAfterBasic.some(c=>c.cardNumber==='001' && String(c.question).includes('日本の首都')),`${name}: card number and content persisted`);
+    assert.ok(cardsAfterBasic.some(c=>c.cardNumber==='1' && String(c.question).includes('日本の首都')),`${name}: card number and content persisted`);
 
     stage='reverse-card-create';
     const beforeReverse=(await idb(page,'cards')).length;
-    await addDialogNote(page,{type:'基本（表裏2枚）',number:'R-01',fields:{Front:'表',Back:'裏',Extra:'双方向'},tags:'reverse'});
+    await addDialogNote(page,{type:'基本（表裏2枚）',number:'2',fields:{Front:'表',Back:'裏',Extra:'双方向'},tags:'reverse'});
     assert.equal((await idb(page,'cards')).length,beforeReverse+2,`${name}: reverse creates two cards`);
 
     stage='cloze-card-create';
     const beforeCloze=(await idb(page,'cards')).length;
-    await addDialogNote(page,{type:'穴埋め',number:'C-01',fields:{Text:'日本の首都は {{c1::東京}}、最大都市も {{c2::東京}}。','Back Extra':'地理'},tags:'cloze'});
+    await addDialogNote(page,{type:'穴埋め',number:'4',fields:{Text:'日本の首都は {{c1::東京}}、最大都市も {{c2::東京}}。','Back Extra':'地理'},tags:'cloze'});
     assert.equal((await idb(page,'cards')).length,beforeCloze+2,`${name}: cloze creates siblings`);
 
     stage='custom-study-dialog';
@@ -106,6 +106,7 @@ async function testEngine(name, engine) {
     await page.locator('#study-cancel').click();
 
     stage='review-and-scratch';
+    await page.locator('[data-route="home"]').click();
     const deckButton=page.locator('.deck-name-button').filter({hasText:'ReviewDeck'}).first();
     await deckButton.click();
     await page.getByRole('button',{name:'今すぐ学習'}).click();

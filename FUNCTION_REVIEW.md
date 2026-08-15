@@ -22,7 +22,7 @@ This review is a release gate for the Study Cards PWA. A feature is only called 
 - Manual backup snapshot, database check and media check.
 - Statistics rendering.
 - JSON and CSV export.
-- Sync client transport with an engine-independent in-page mock of a Google Apps Script endpoint. The mock uses a production-shaped GAS URL and exercises the same write and JSONP pull paths without depending on Playwright network interception behavior.
+- Sync client transport with an engine-independent in-page mock of a Google Apps Script endpoint. The mock uses a production-shaped GAS URL and exercises the actual `fetch()` write plus `document.head.append(script)` JSONP pull path without depending on Playwright network interception behavior.
 - Profile creation and switching.
 - Offline reload through the Service Worker cache.
 

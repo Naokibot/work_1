@@ -97,7 +97,25 @@ export async function createNote(note: Omit<StudyNote, 'id' | 'guid' | 'createdA
     deletedAt: null
   };
   const nextState = { ...state, notes: [...state.notes, full] };
-  const cards = generateCardsForNote(full, nextState);
+  let cards = generateCardsForNote(full, nextState);
+  const requestedRaw = full.fields.__CardNumber?.trim() ?? '';
+  if (requestedRaw) {
+    if (!/^\d+$/u.test(requestedRaw) || Number(requestedRaw) < 1) throw new Error('カード番号が不正です。');
+    const requested = Number(requestedRaw);
+    const existingCards = await getCards(false, true);
+    const used = new Set(existingCards
+      .filter((card) => !card.deletedAt && (card.profileId ?? DEFAULT_PROFILE_ID) === full.profileId)
+      .map((card) => /^\d+$/u.test((card.cardNumber ?? '').trim()) ? Number(card.cardNumber) : null)
+      .filter((value): value is number => value !== null && value > 0));
+    if (used.has(requested)) throw new Error('カード番号 ' + requested + ' は使用済みです。別の番号を選んでください。');
+    let candidate = requested;
+    cards = cards.map((card) => {
+      while (used.has(candidate)) candidate += 1;
+      const numbered = { ...card, cardNumber: String(candidate) };
+      used.add(candidate); candidate += 1;
+      return numbered;
+    });
+  }
   await saveAnkiState(nextState);
   await saveCards(cards);
   return cards;

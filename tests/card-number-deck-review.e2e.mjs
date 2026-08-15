@@ -62,7 +62,7 @@ async function run(name, engine) {
 
     await page.locator('#card-close').click();
     await page.locator('[data-route="home"]').click();
-    await page.getByRole('button', { name: '数学', exact: true }).click();
+    await page.locator('.deck-name-button').filter({ hasText: '数学' }).first().click();
     await page.getByRole('button', { name: '今すぐ学習', exact: true }).click();
     await page.waitForSelector('#review-screen:not([hidden])');
     assert.ok((await page.locator('#review-question').innerText()).trim().length > 0, `${name}: question is visible`);

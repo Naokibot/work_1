@@ -106,6 +106,7 @@ async function testEngine(name, engine) {
     await page.locator('#study-cancel').click();
 
     stage='review-and-scratch';
+    await page.locator('[data-route="home"]').click();
     const deckButton=page.locator('.deck-name-button').filter({hasText:'ReviewDeck'}).first();
     await deckButton.click();
     await page.getByRole('button',{name:'今すぐ学習'}).click();

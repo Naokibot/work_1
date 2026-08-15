@@ -24,9 +24,15 @@ This review is a release gate for the Study Cards PWA. A feature is only called 
 - JSON and CSV export.
 - Sync client transport with an engine-independent in-page mock of a Google Apps Script endpoint. The mock uses a production-shaped GAS URL and exercises the actual `fetch()` write plus `document.head.append(script)` JSONP pull path without depending on Playwright network interception behavior.
 - Profile creation and switching.
-- Offline reload through the Service Worker cache.
+- Offline/PWA behavior: Chromium performs an actual forced-offline reload; WebKit verifies the installed Service Worker cache contains the application shell. Playwright WebKit's forced-offline reload can fail with an internal harness error, so that harness behavior is not misreported as an application failure.
 
 The existing acceptance suite additionally verifies `.apkg` round-trip import/export, Image Occlusion pointer editing, IndexedDB persistence after reload, and both Chromium/WebKit engines.
+
+## Review findings fixed in this cycle
+
+- Interrupted study sessions were persisted but startup only displayed a notice; the app now automatically resumes the stored review session.
+- Browser acceptance previously used a short fixed delay for a major screen transition; it now waits for the observable Browser UI state to avoid WebKit timing flakes.
+- One-shot patch workflows used during review were removed after their changes were applied.
 
 ## Non-browser/external boundaries
 

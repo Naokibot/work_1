@@ -62,7 +62,8 @@ async function run(name, engine) {
     assert.ok(cardId,`${name}: card created`); await addHistory(page,cardId);
 
     await page.locator('[data-route="home"]').click();
-    await page.getByRole('button',{name:'書き出しテスト',exact:true}).click();
+    await page.waitForFunction(()=>document.getElementById('view')?.textContent?.includes('書き出しテスト'));
+    await page.locator('.deck-name-button').filter({hasText:'書き出しテスト'}).first().click();
     const downloadPromise=page.waitForEvent('download');
     await page.getByRole('button',{name:'デッキを書き出す (.apkg)',exact:true}).click();
     const download=await downloadPromise; const saved=path.join(temp,`${name}-書き出しテスト.apkg`); await download.saveAs(saved);
@@ -81,10 +82,22 @@ async function run(name, engine) {
     assert.equal(await periodCount(page,'全期間'),4,`${name}: all-time stats`);
 
     const clean=await browser.newContext({viewport:{width:1024,height:768},serviceWorkers:'allow'}); const imported=await clean.newPage();
-    await imported.goto(url,{waitUntil:'networkidle'}); await imported.locator('#import-file').setInputFiles(saved);
+    await imported.goto(url,{waitUntil:'networkidle'}); await imported.waitForSelector('.main-toolbar');
+    assert.ok(!(await imported.locator('#view').innerText()).includes('書き出しテスト'),`${name}: device B does not receive device A local deck automatically`);
+
+    imported.once('dialog',(dialog)=>dialog.accept('端末B限定'));
+    await imported.getByRole('button',{name:'デッキを作成',exact:true}).click();
+    await imported.waitForFunction(()=>document.getElementById('view')?.textContent?.includes('端末B限定'));
+    await page.locator('[data-route="home"]').click();
+    await page.waitForSelector('.main-toolbar');
+    assert.ok(!(await page.locator('#view').innerText()).includes('端末B限定'),`${name}: device A does not receive device B local deck automatically`);
+
+    await imported.locator('#import-file').setInputFiles(saved);
     await imported.waitForFunction(()=>document.getElementById('status-message')?.textContent?.includes('Ankiパッケージを読み込みました'));
     await imported.waitForTimeout(900); await imported.waitForSelector('.main-toolbar');
-    assert.ok((await imported.locator('#view').innerText()).includes('書き出しテスト'),`${name}: exported Anki deck can be re-imported`);
+    const importedText=await imported.locator('#view').innerText();
+    assert.ok(importedText.includes('書き出しテスト'),`${name}: exported Anki deck can be re-imported on another device`);
+    assert.ok(importedText.includes('端末B限定'),`${name}: importing device A deck does not replace device B local decks`);
     await clean.close(); await context.close(); process.stdout.write(`deck-portability-stats:${name}:pass\n`);
   } finally { await browser.close(); }
 }

@@ -14,6 +14,7 @@ function ensureField(): void {
   input.maxLength = 64;
   input.dataset.field = FIELD_NAME;
   input.autocomplete = 'off';
+  input.spellcheck = false;
   input.placeholder = '例: 001 / A-12 / 英単語-25';
   input.setAttribute('aria-label', 'カード番号（任意）');
 

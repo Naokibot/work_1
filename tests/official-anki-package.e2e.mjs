@@ -6,8 +6,7 @@ import { chromium } from 'playwright';
 
 const fixture = process.env.OFFICIAL_ANKI_PACKAGE;
 if (!fixture) throw new Error('OFFICIAL_ANKI_PACKAGE is required');
-const fixtureStat = await stat(fixture);
-assert.ok(fixtureStat.size > 1000, 'official Anki package exists');
+assert.ok((await stat(fixture)).size > 1000, 'official Anki package exists');
 
 const dist = path.resolve('dist');
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml' };
@@ -53,15 +52,16 @@ try {
   });
   const importedCard = snapshot.cards.find((card) => card.question.includes('Official Anki 26.5 fixture'));
   assert.ok(importedCard, `official Anki card imported; snapshot=${JSON.stringify(snapshot)}`);
+  assert.match(importedCard.question, /data:image\/svg\+xml;base64,/, 'official Anki media embedded into imported card');
   assert.ok(snapshot.decks.some((deck) => deck.name === 'Interop::Official 26.5'), `official Anki deck imported; decks=${JSON.stringify(snapshot.decks)}`);
-  assert.ok(snapshot.notes.some((note) => Object.values(note.fields).some((value) => String(value).includes('Official Anki 26.5 fixture'))), 'official Anki note fields preserved');
+  assert.ok(snapshot.notes.some((note) => Object.values(note.fields).some((value) => String(value).includes('data:image/svg+xml;base64,'))), 'official media preserved in note fields');
 
   await page.locator('[data-route="anki"]').click();
   await page.waitForTimeout(300);
   const content = await page.locator('#view').innerText();
   assert.ok(content.includes('Official Anki 26.5 fixture'), 'official imported card appears in browser UI');
   assert.equal(runtimeErrors.length, 0, `no browser runtime errors: ${runtimeErrors.join('\n')}`);
-  process.stdout.write('official-anki-interop: Anki 26.5 latest collection package imported\n');
+  process.stdout.write('official-anki-interop: Anki 26.5 latest collection package + media imported\n');
 } finally {
   await browser?.close();
   server.close();

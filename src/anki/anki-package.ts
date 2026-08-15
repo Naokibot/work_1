@@ -39,12 +39,17 @@ function sqlRuntime(): Promise<SqlJsRuntime> {
 }
 
 function readVarint(bytes: Uint8Array, offset: number): { value: number; next: number } {
-  let value = 0, shift = 0, cursor = offset;
-  while (cursor < bytes.length && shift <= 49) {
+  let value = 0n;
+  let shift = 0n;
+  let cursor = offset;
+  for (let count = 0; count < 10 && cursor < bytes.length; count += 1) {
     const byte = bytes[cursor++] ?? 0;
-    value += (byte & 0x7f) * 2 ** shift;
-    if ((byte & 0x80) === 0) return { value, next: cursor };
-    shift += 7;
+    value |= BigInt(byte & 0x7f) << shift;
+    if ((byte & 0x80) === 0) {
+      const max = BigInt(Number.MAX_SAFE_INTEGER);
+      return { value: Number(value > max ? max : value), next: cursor };
+    }
+    shift += 7n;
   }
   throw new Error('Invalid protobuf varint');
 }

@@ -38,7 +38,7 @@ async function idb(page, expression, arg) {
 function panel(page, title) { return page.locator('.settings-card').filter({ hasText: title }).first(); }
 async function acceptNext(page, value='') { page.once('dialog', d => d.type()==='confirm' ? d.accept() : d.accept(value)); }
 
-async function addDialogNote(page, { type='Basic', deck='ReviewDeck', number='', fields={}, tags='' }) {
+async function addDialogNote(page, { type='基本', deck='ReviewDeck', number='', fields={}, tags='' }) {
   await page.locator('#add-card-button').click();
   await page.waitForSelector('#card-dialog[open]');
   await page.locator('#note-type').selectOption({ label:type });
@@ -90,12 +90,12 @@ async function testEngine(name, engine) {
 
     stage='reverse-card-create';
     const beforeReverse=(await idb(page,'cards')).length;
-    await addDialogNote(page,{type:'Basic (and reversed card)',number:'R-01',fields:{Front:'表',Back:'裏',Extra:'双方向'},tags:'reverse'});
+    await addDialogNote(page,{type:'基本（表裏2枚）',number:'R-01',fields:{Front:'表',Back:'裏',Extra:'双方向'},tags:'reverse'});
     assert.equal((await idb(page,'cards')).length,beforeReverse+2,`${name}: reverse creates two cards`);
 
     stage='cloze-card-create';
     const beforeCloze=(await idb(page,'cards')).length;
-    await addDialogNote(page,{type:'Cloze',number:'C-01',fields:{Text:'日本の首都は {{c1::東京}}、最大都市も {{c2::東京}}。','Back Extra':'地理'},tags:'cloze'});
+    await addDialogNote(page,{type:'穴埋め',number:'C-01',fields:{Text:'日本の首都は {{c1::東京}}、最大都市も {{c2::東京}}。','Back Extra':'地理'},tags:'cloze'});
     assert.equal((await idb(page,'cards')).length,beforeCloze+2,`${name}: cloze creates siblings`);
 
     stage='custom-study-dialog';
@@ -152,12 +152,12 @@ async function testEngine(name, engine) {
     await refreshedBrowser.getByRole('button',{name:'実行'}).click(); await page.waitForTimeout(200);
 
     stage='filtered-deck';
-    const filtered=panel(page,'フィルターデッキ / Custom Study');
+    const filtered=panel(page,'フィルターデッキ / カスタム学習');
     await filtered.getByLabel('名前').fill('Review Filter');
     await filtered.getByLabel('検索条件').fill('deck:ReviewDeck');
     await filtered.getByLabel('上限').fill('10');
     await filtered.getByRole('button',{name:'フィルターデッキを作成'}).click(); await page.waitForTimeout(200);
-    assert.ok((await panel(page,'フィルターデッキ / Custom Study').innerText()).includes('Review Filter'),`${name}: filtered deck created`);
+    assert.ok((await panel(page,'フィルターデッキ / カスタム学習').innerText()).includes('Review Filter'),`${name}: filtered deck created`);
 
     stage='custom-note-type';
     const noteTypes=panel(page,'ノートタイプ / フィールド / カードテンプレート');
@@ -186,7 +186,7 @@ async function testEngine(name, engine) {
     stage='stats';
     await page.locator('[data-route="stats"]').click(); await page.waitForTimeout(150);
     const statsText=await page.locator('#view').innerText();
-    assert.ok(statsText.includes('コレクション統計') && statsText.includes('カード状態 / 保持率') && statsText.includes('予測 / 間隔'),`${name}: stats page renders`);
+    assert.ok(statsText.includes('期間サマリー') && statsText.includes('現在のカード状態 / 選択期間の保持率') && statsText.includes('予測 / 間隔'),`${name}: stats page renders`);
 
     stage='settings-and-export';
     await page.locator('[data-route="settings"]').click(); await page.waitForTimeout(100);

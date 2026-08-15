@@ -26,7 +26,7 @@ function openMenu(source: HTMLButtonElement, name: MenuName): void {
   const popup = document.createElement('div'); popup.className = 'anki-menu-popup';
   const items: Array<HTMLElement> = [];
   if (name === 'file') items.push(
-    menuButton('読み込み…', 'Ctrl+Shift+I', () => byId<HTMLInputElement>('import-file')?.click()),
+    menuButton('Ankiデッキを読み込む…', 'Ctrl+Shift+I', () => byId<HTMLInputElement>('import-file')?.click()),
     menuButton('同期', 'Y', () => byId<HTMLButtonElement>('sync-button')?.click()), separator(),
     menuButton('プロファイルを切替', '', () => { click('[data-route="anki"]'); requestAnimationFrame(() => focusSection('プロファイル')); })
   );
@@ -92,7 +92,7 @@ function enhanceStats(): void {
   const view = byId<HTMLElement>('view');
   if (!view || !view.querySelector('.metric-grid') || view.querySelector('.stats-tabs')) return;
   const tabs = document.createElement('div'); tabs.className = 'stats-tabs';
-  ['1か月', '3か月', '1年', '全期間'].forEach((label, index) => {
+  ['過去1週間', '過去1か月', '過去1年', '全期間'].forEach((label, index) => {
     const button = document.createElement('button'); button.type = 'button'; button.className = `stats-tab${index === 0 ? ' is-active' : ''}`; button.textContent = label;
     button.addEventListener('click', () => {
       tabs.querySelectorAll('.stats-tab').forEach((item) => item.classList.remove('is-active')); button.classList.add('is-active');

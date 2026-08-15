@@ -1,0 +1,51 @@
+/* iPad/WebKit compatibility and touch affordances kept separate from the visual theme. */
+button,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+button:not(:disabled) {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.08);
+}
+
+.card-number,
+.review-number {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.review-number {
+  min-height: 18px;
+  margin: 0 0 2px;
+  text-align: center;
+}
+
+.dialog.dialog-fallback-open {
+  display: block;
+  position: fixed;
+  z-index: 120;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .small-button,
+  .mode-card,
+  .choice-button,
+  .rating-button,
+  .nav-item,
+  .tool-button,
+  .icon-button,
+  .text-button {
+    min-height: 48px;
+  }
+}

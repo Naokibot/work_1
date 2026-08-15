@@ -56,6 +56,17 @@ async function stored(page) {
   });
 }
 
+async function waitForStored(page, predicate) {
+  const deadline = Date.now() + 5000;
+  let last;
+  while (Date.now() < deadline) {
+    last = await stored(page);
+    if (predicate(last)) return last;
+    await page.waitForTimeout(50);
+  }
+  return last;
+}
+
 function panel(page, title) {
   return page.locator('.settings-card').filter({ hasText: title }).first();
 }
@@ -85,12 +96,16 @@ async function testEngine(name, engine) {
     await fsrs.getByLabel('希望保持率 (0.70〜0.99)').fill('0.93');
     await fsrs.getByRole('button', { name: 'デッキオプションを保存' }).click();
     await page.waitForFunction(() => document.getElementById('status-message')?.textContent?.includes('デッキオプションを保存'));
+    const deckState = await waitForStored(page, (data) => data.anki?.presets?.some((preset) => preset.id === 'preset_default' && preset.desiredRetention === 0.93));
+    assert.equal(deckState?.anki?.presets?.find((preset) => preset.id === 'preset_default')?.desiredRetention, 0.93, `${name}: deck preset transaction committed`);
 
     stage = 'save-app-settings';
     await page.locator('[data-route="settings"]').click();
     await page.getByLabel('残りカード数を表示').uncheck();
     await page.getByLabel('自動同期').uncheck();
-    await page.waitForTimeout(200);
+    const settingsState = await waitForStored(page, (data) => data.settings?.showRemainingCount === false && data.settings?.autoSync === false);
+    assert.equal(settingsState?.settings?.showRemainingCount, false, `${name}: first setting transaction committed`);
+    assert.equal(settingsState?.settings?.autoSync, false, `${name}: second setting transaction committed`);
 
     stage = 'verify-before-reload';
     let data = await stored(page);

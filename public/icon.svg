@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Study Cards icon">
+  <rect width="512" height="512" rx="112" fill="#f7f7f5"/>
+  <rect x="112" y="92" width="288" height="328" rx="40" fill="#ffffff" stroke="#1d1d1f" stroke-width="18"/>
+  <path d="M164 184h184M164 256h146M164 328h112" stroke="#1d1d1f" stroke-width="24" stroke-linecap="round"/>
+</svg>

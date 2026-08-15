@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f7f7f5">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Study Cards</title>
+</head>
+<body>
+  <div id="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">WORK_1</p>
+        <h1 id="page-title">暗記カード</h1>
+      </div>
+      <button id="sync-button" class="icon-button" type="button" aria-label="Google Sheetsと同期">
+        <span aria-hidden="true">↻</span>
+        <span id="sync-badge" class="badge" hidden>0</span>
+      </button>
+    </header>
+
+    <div id="status-message" class="status-message" role="status" aria-live="polite" hidden></div>
+    <main id="view" tabindex="-1"></main>
+
+    <nav class="bottom-nav" aria-label="メインメニュー">
+      <button type="button" data-route="home" class="nav-item is-active"><span aria-hidden="true">⌂</span><span>ホーム</span></button>
+      <button type="button" data-route="cards" class="nav-item"><span aria-hidden="true">▤</span><span>カード</span></button>
+      <button type="button" data-route="stats" class="nav-item"><span aria-hidden="true">⌁</span><span>記録</span></button>
+      <button type="button" data-route="settings" class="nav-item"><span aria-hidden="true">⚙</span><span>設定</span></button>
+    </nav>
+
+    <button id="add-card-button" class="fab" type="button" aria-label="カードを追加">＋</button>
+  </div>
+
+  <section id="review-screen" class="review-screen" hidden aria-label="暗記セッション">
+    <header class="review-header">
+      <button id="review-close" class="text-button" type="button">終了</button>
+      <div>
+        <p id="review-progress" class="review-progress">0 / 0</p>
+        <p id="review-timer" class="review-timer">00:00</p>
+      </div>
+      <button id="review-favorite" class="icon-button" type="button" aria-label="お気に入り切り替え">☆</button>
+    </header>
+    <main class="review-main">
+      <div class="review-card" id="review-card">
+        <p id="review-tags" class="tag-line"></p>
+        <h2 id="review-question" class="review-question"></h2>
+        <div id="choice-list" class="choice-list" hidden></div>
+        <button id="show-answer" class="primary-button wide" type="button">答えを見る</button>
+        <section id="answer-panel" class="answer-panel" hidden>
+          <p class="label">答え</p>
+          <p id="review-answer" class="review-answer"></p>
+          <p id="review-explanation" class="review-explanation"></p>
+        </section>
+      </div>
+
+      <section class="scratch-section" aria-label="計算メモ">
+        <div class="scratch-toolbar">
+          <strong>計算メモ</strong>
+          <div class="tool-row">
+            <button id="pad-pen" class="tool-button is-active" type="button">ペン</button>
+            <button id="pad-eraser" class="tool-button" type="button">消しゴム</button>
+            <button id="pad-undo" class="tool-button" type="button">戻す</button>
+            <button id="pad-redo" class="tool-button" type="button">進む</button>
+            <button id="pad-clear" class="tool-button" type="button">消去</button>
+          </div>
+        </div>
+        <canvas id="scratch-pad" aria-label="Apple Pencilまたは指で書ける計算メモ"></canvas>
+      </section>
+    </main>
+    <footer id="rating-row" class="rating-row" hidden>
+      <button type="button" data-rating="again" class="rating-button">もう一度<small>10分</small></button>
+      <button type="button" data-rating="hard" class="rating-button">難しい<small>短め</small></button>
+      <button type="button" data-rating="good" class="rating-button">普通<small>標準</small></button>
+      <button type="button" data-rating="easy" class="rating-button">簡単<small>長め</small></button>
+    </footer>
+  </section>
+
+  <dialog id="card-dialog" class="dialog">
+    <form id="card-form" method="dialog">
+      <div class="dialog-header"><h2 id="card-dialog-title">カードを追加</h2><button class="icon-button" value="cancel" aria-label="閉じる">×</button></div>
+      <input id="card-id" type="hidden">
+      <label>問題<textarea id="card-question" required maxlength="5000" rows="4"></textarea></label>
+      <label>正解<textarea id="card-answer" required maxlength="5000" rows="3"></textarea></label>
+      <div class="grid-3">
+        <label>誤答1<input id="card-wrong-1" maxlength="5000"></label>
+        <label>誤答2<input id="card-wrong-2" maxlength="5000"></label>
+        <label>誤答3<input id="card-wrong-3" maxlength="5000"></label>
+      </div>
+      <label>解説<textarea id="card-explanation" maxlength="10000" rows="3"></textarea></label>
+      <label>タグ（カンマ区切り）<input id="card-tags" placeholder="数学, 図形"></label>
+      <label class="check-row"><input id="card-favorite" type="checkbox">お気に入り</label>
+      <p id="card-form-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions"><button value="cancel" class="secondary-button">キャンセル</button><button id="card-save" value="default" class="primary-button">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="study-dialog" class="dialog compact">
+    <form id="study-form" method="dialog">
+      <div class="dialog-header"><h2>学習を開始</h2><button class="icon-button" value="cancel" aria-label="閉じる">×</button></div>
+      <label>学習モード<select id="study-mode">
+        <option value="due">今日の復習</option><option value="new">新規カード</option><option value="weak">苦手カード</option><option value="wrong">最近の間違い</option><option value="favorite">お気に入り</option><option value="random">ランダム</option><option value="tag">タグ指定</option><option value="exam">試験モード</option>
+      </select></label>
+      <label>回答方法<select id="study-style"><option value="self">自己評価</option><option value="choice">選択問題</option></select></label>
+      <label>タグ<select id="study-tag"><option value="">すべて</option></select></label>
+      <label>試験問題数<select id="study-size"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label>
+      <div class="dialog-actions"><button value="cancel" class="secondary-button">キャンセル</button><button id="study-start" value="default" class="primary-button">開始</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="./assets/main.js"></script>
+</body>
+</html>

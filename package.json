@@ -1,0 +1,22 @@
+{
+  "name": "work-1-study-cards",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "iPad-first offline spaced-repetition PWA with Google Sheets sync through Apps Script.",
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "lint": "node scripts/lint.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "node scripts/build.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "security": "node scripts/security-check.mjs",
+    "check": "npm run lint && npm run typecheck && npm test && npm run security"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

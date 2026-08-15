@@ -1,0 +1,28 @@
+export function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const object = value as Record<string, unknown>;
+  const keys = Object.keys(object).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(object[key])}`).join(',')}}`;
+}
+
+export function canonicalRequest(action: string, timestamp: string, nonce: string, requestId: string, payload: unknown): string {
+  return [action, timestamp, nonce, requestId, stableStringify(payload)].join('\n');
+}
+
+function base64Url(bytes: ArrayBuffer): string {
+  const binary = String.fromCharCode(...new Uint8Array(bytes));
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
+}
+
+export async function signRequest(secret: string, canonical: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return base64Url(await crypto.subtle.sign('HMAC', key, encoder.encode(canonical)));
+}
+
+export function encodePayload(value: unknown): string {
+  const bytes = new TextEncoder().encode(stableStringify(value));
+  const binary = String.fromCharCode(...bytes);
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
+}

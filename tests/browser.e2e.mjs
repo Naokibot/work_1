@@ -95,7 +95,7 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
 
     stage = 'browser';
     process.stdout.write(`e2e:${name}:${stage}\n`);
-    if (!(await page.locator('#review-screen').getAttribute('hidden'))) await page.locator('#review-close').click();
+    if (await page.locator('#review-screen:not([hidden])').count()) await page.locator('#review-close').click();
     await page.locator('[data-route="anki"]').click();
     await page.waitForTimeout(250);
     const browserText = await page.locator('#view').innerText();
@@ -121,6 +121,32 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     await page.locator('[data-route="anki"]').click();
     await page.waitForTimeout(250);
     assert.ok((await page.locator('#view').innerText()).includes('Capital of Japan?'), `${name}: APKG roundtrip preserved note`);
+
+    stage = 'image-occlusion-editor';
+    process.stdout.write(`e2e:${name}:${stage}\n`);
+    const beforeIoCards = await indexedCount(page, 'cards');
+    await page.locator('#add-card-button').click();
+    await page.waitForSelector('#card-dialog[open]');
+    await page.locator('#note-type').selectOption({ label: 'Image Occlusion' });
+    await page.locator('#note-type').dispatchEvent('change');
+    await page.getByRole('button', { name: 'Image Occlusionエディタを開く' }).click();
+    await page.waitForSelector('.io-editor-dialog[open]');
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="white"/><circle cx="300" cy="200" r="80" fill="black"/></svg>');
+    await page.locator('.io-editor-dialog input[type="file"]').setInputFiles({ name: 'diagram.svg', mimeType: 'image/svg+xml', buffer: svg });
+    await page.waitForSelector('.io-editor-stage img:not([hidden])');
+    await page.getByRole('button', { name: '矩形', exact: true }).click();
+    const stageBox = await page.locator('.io-editor-stage').boundingBox();
+    assert.ok(stageBox && stageBox.width > 100 && stageBox.height > 100, `${name}: Image Occlusion stage sized`);
+    await page.mouse.move(stageBox.x + stageBox.width * 0.25, stageBox.y + stageBox.height * 0.25);
+    await page.mouse.down();
+    await page.mouse.move(stageBox.x + stageBox.width * 0.55, stageBox.y + stageBox.height * 0.5, { steps: 4 });
+    await page.mouse.up();
+    assert.equal(await page.locator('.io-editor-mask').count(), 1, `${name}: rectangle mask created with pointer input`);
+    await page.locator('.io-editor-dialog select').selectOption('hide-all-guess-one');
+    await page.locator('.io-editor-dialog .primary').click();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
+    assert.ok((await indexedCount(page, 'cards')) > beforeIoCards, `${name}: Image Occlusion generated card`);
 
     stage = 'reload-persistence';
     process.stdout.write(`e2e:${name}:${stage}\n`);

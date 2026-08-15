@@ -80,6 +80,25 @@ function protoNumber(map: ProtoMap, field: number, fallback = 0): number { const
 function protoString(map: ProtoMap, field: number, fallback = ''): string { const value = protoBytes(map, field); return value ? textDecoder.decode(value) : fallback; }
 function protoMessages(map: ProtoMap, field: number): ProtoMap[] { return (map.get(field) ?? []).flatMap((item) => item.value instanceof Uint8Array ? [protoDecode(item.value)] : []); }
 
+function makeSqlJsReadable(bytes: Uint8Array): Uint8Array {
+  // Anki registers a custom SQLite collation named `unicase`. sql.js does not
+  // expose sqlite3_create_collation(), and our package importer is read-only.
+  // Replacing only schema occurrences of `COLLATE unicase` with the equal-length
+  // built-in `COLLATE binary ` lets SQLite parse Anki's schema without touching
+  // note/card payloads or changing byte offsets in the database pages.
+  const output = bytes.slice();
+  const needle = textEncoder.encode('COLLATE unicase');
+  const replacement = textEncoder.encode('COLLATE binary ');
+  for (let start = 0; start <= output.length - needle.length; start += 1) {
+    let matches = true;
+    for (let index = 0; index < needle.length; index += 1) {
+      if (output[start + index] !== needle[index]) { matches = false; break; }
+    }
+    if (matches) { output.set(replacement, start); start += needle.length - 1; }
+  }
+  return output;
+}
+
 function rows(db: SqlDatabase, sql: string): SqlRow[] {
   const statement = db.prepare(sql), out: SqlRow[] = [];
   try { while (statement.step()) out.push(statement.getAsObject()); } finally { statement.free(); }
@@ -168,7 +187,7 @@ export async function importAnkiPackage(file:File):Promise<AnkiPackageImportResu
   if(file.size>500*1024*1024)throw new Error('Ankiパッケージが500MBを超えています。');
   const zip=fflate.unzipSync(new Uint8Array(await file.arrayBuffer())),latest=Boolean(zip['collection.anki21b']);
   const collectionBytes=latest?fzstd.decompress(zip['collection.anki21b'] as Uint8Array):(zip['collection.anki21']??zip['collection.anki2']);if(!collectionBytes)throw new Error('Ankiコレクションがパッケージ内に見つかりません。');
-  let media:Map<string,PackageMedia>;try{media=latest?decodeLatestMedia(zip):decodeLegacyMedia(zip)}catch(error){throw new Error('Anki media metadata: '+(error instanceof Error?error.message:String(error)))}const SQL=await sqlRuntime(),db=new SQL.Database(collectionBytes);
+  let media:Map<string,PackageMedia>;try{media=latest?decodeLatestMedia(zip):decodeLegacyMedia(zip)}catch(error){throw new Error('Anki media metadata: '+(error instanceof Error?error.message:String(error)))}const SQL=await sqlRuntime(),db=new SQL.Database(makeSqlJsReadable(collectionBytes));
   try{
     if(!tableExists(db,'notes')||!tableExists(db,'cards'))throw new Error('有効なAnkiコレクションではありません。');
     const existingState=await getAnkiState(),profileId=existingState.activeProfileId,modern=tableExists(db,'notetypes')&&tableExists(db,'fields')&&tableExists(db,'templates');

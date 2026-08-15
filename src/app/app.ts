@@ -234,6 +234,7 @@ export class App {
     if (type.kind === 'image-occlusion') {
       fields.append(el('p', { className: 'help', text: '画像穴埋めはブラウザ画面の専用エディタから作成できます。' }));
       const open = button('画像穴埋めエディタを開く', 'anki-button');
+      open.dataset.action = 'image-occlusion-editor';
       open.addEventListener('click', () => { this.cardDialog.close(); void this.navigate('anki'); });
       fields.append(open); return;
     }

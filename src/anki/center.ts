@@ -481,7 +481,7 @@ export class AnkiCenter {
   }
 
   private renderFilteredDecks(state: AnkiState): HTMLElement {
-    const node = section('フィルターデッキ / Custom Study');
+    const node = section('フィルターデッキ / カスタム学習');
     const name = labeledInput('名前', 'Filtered Deck');
     const query = labeledInput('検索条件', 'is:due');
     const limit = labeledInput('上限', '100', 'number');

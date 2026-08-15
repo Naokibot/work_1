@@ -99,7 +99,7 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     await page.locator('[data-route="anki"]').click();
     await page.waitForFunction(() => document.getElementById('view')?.textContent?.includes('ブラウザ / 高度な検索'));
     const browserText = await page.locator('#view').innerText();
-    for (const heading of ['ブラウザ / 高度な検索', 'フィルターデッキ / Custom Study', 'ノートタイプ / フィールド / カードテンプレート', 'FSRS-6 / デッキオプション']) assert.ok(browserText.includes(heading), `${name}: ${heading}`);
+    for (const heading of ['ブラウザ / 高度な検索', 'フィルターデッキ / カスタム学習', 'ノートタイプ / フィールド / カードテンプレート', 'FSRS-6 / デッキオプション']) assert.ok(browserText.includes(heading), `${name}: ${heading}`);
     assert.ok(browserText.includes('Capital of Japan?'), `${name}: generated note searchable`);
 
     stage = 'apkg-roundtrip';

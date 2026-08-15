@@ -72,7 +72,7 @@ class ImageOcclusionEditor {
 
   constructor() {
     this.dialog.className = 'io-editor-dialog';
-    this.dialog.setAttribute('aria-label', 'Image Occlusion');
+    this.dialog.setAttribute('aria-label', '画像穴埋め');
     this.build();
     this.bind();
     document.body.append(this.dialog);
@@ -87,7 +87,7 @@ class ImageOcclusionEditor {
 
   private build(): void {
     const shell = document.createElement('div'); shell.className = 'io-editor-shell';
-    const title = document.createElement('div'); title.className = 'io-editor-title'; title.append(document.createTextNode('Image Occlusion'));
+    const title = document.createElement('div'); title.className = 'io-editor-title'; title.append(document.createTextNode('画像穴埋め'));
     const close = document.createElement('button'); close.type = 'button'; close.textContent = '×'; close.dataset.action = 'close'; title.append(close);
     const toolbar = document.createElement('div'); toolbar.className = 'io-editor-toolbar';
     for (const [tool, label] of [['select','選択'],['rect','矩形'],['ellipse','楕円'],['polygon','多角形'],['text','テキスト']] as Array<[Tool,string]>) {
@@ -101,7 +101,7 @@ class ImageOcclusionEditor {
     const sep2 = document.createElement('span'); sep2.className = 'sep'; toolbar.append(sep2);
     this.file.type = 'file'; this.file.accept = 'image/*'; this.file.hidden = true;
     const load = document.createElement('button'); load.type = 'button'; load.dataset.action = 'load'; load.textContent = '画像を開く'; toolbar.append(load, this.file);
-    const modeLabel = document.createElement('label'); modeLabel.textContent = 'モード '; this.mode.append(new Option('Hide All, Guess One','hide-all-guess-one'), new Option('Hide One, Guess One','hide-one-guess-one')); modeLabel.append(this.mode); toolbar.append(modeLabel);
+    const modeLabel = document.createElement('label'); modeLabel.textContent = 'モード '; this.mode.append(new Option('すべて隠して1つ答える','hide-all-guess-one'), new Option('1つだけ隠して答える','hide-one-guess-one')); modeLabel.append(this.mode); toolbar.append(modeLabel);
 
     const body = document.createElement('div'); body.className = 'io-editor-body';
     const canvasWrap = document.createElement('div'); canvasWrap.className = 'io-editor-canvas-wrap';
@@ -109,7 +109,7 @@ class ImageOcclusionEditor {
     const empty = document.createElement('div'); empty.className = 'io-editor-empty'; empty.dataset.empty = 'true'; empty.textContent = '画像を開く、または画像をここへ貼り付けてください。';
     this.image.alt = ''; this.image.hidden = true; this.stage.append(empty, this.image); canvasWrap.append(this.stage);
     const sidebar = document.createElement('aside'); sidebar.className = 'io-editor-sidebar';
-    sidebar.append(this.field('Header', this.header), this.field('Back Extra', this.backExtra), this.field('Comments', this.comments));
+    sidebar.append(this.field('見出し', this.header), this.field('裏面の補足', this.backExtra), this.field('コメント', this.comments));
     const hint = document.createElement('p'); hint.className = 'io-editor-hint'; hint.textContent = '矩形・楕円はドラッグ。多角形は頂点を順にタップして「多角形を確定」。選択ツールでは移動と右下ハンドルでリサイズできます。Deleteキーでも削除できます。'; sidebar.append(hint);
     this.maskList.className = 'io-mask-list'; sidebar.append(this.maskList); body.append(canvasWrap, sidebar);
     const footer = document.createElement('div'); footer.className = 'io-editor-footer'; this.count.className = 'io-editor-count'; footer.append(this.count);
@@ -239,5 +239,5 @@ let editor:ImageOcclusionEditor|null=null;
 export function installImageOcclusionEditor():void{
   if(!document.getElementById('io-editor-style')){const styles=style();styles.id='io-editor-style';document.head.append(styles);}
   editor=new ImageOcclusionEditor();
-  document.addEventListener('click',(event)=>{const button=(event.target as HTMLElement).closest<HTMLButtonElement>('#note-fields button');if(!button||!button.textContent?.includes('Image Occlusion'))return;const select=document.getElementById('note-type') as HTMLSelectElement|null;if(!select)return;event.preventDefault();event.stopImmediatePropagation();void getAnkiState().then((state)=>{const type=state.noteTypes.find((item)=>item.id===select.value);if(type?.kind!=='image-occlusion')return;editor?.open();});},true);
+  document.addEventListener('click',(event)=>{const button=(event.target as HTMLElement).closest<HTMLButtonElement>('#note-fields button[data-action="image-occlusion-editor"]');if(!button)return;const select=document.getElementById('note-type') as HTMLSelectElement|null;if(!select)return;event.preventDefault();event.stopImmediatePropagation();void getAnkiState().then((state)=>{const type=state.noteTypes.find((item)=>item.id===select.value);if(type?.kind!=='image-occlusion')return;editor?.open();});},true);
 }

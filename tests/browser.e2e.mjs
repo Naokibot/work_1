@@ -5,7 +5,7 @@ import path from 'node:path';
 import { chromium, webkit } from 'playwright';
 
 const dist = path.resolve('dist');
-const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml' };
+const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.wasm': 'application/wasm' };
 const server = http.createServer(async (req, res) => {
   try {
     const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
@@ -37,13 +37,20 @@ async function indexedCount(page, store) {
   }, store);
 }
 
+async function downloadBuffer(download) {
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
 for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
   let browser;
   let stage = 'launch';
   try {
     process.stdout.write(`e2e:${name}:launch\n`);
     browser = await engine.launch({ headless: true });
-    const context = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+    const context = await browser.newContext({ viewport: { width: 1024, height: 768 }, acceptDownloads: true });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(String(error)));
@@ -94,6 +101,26 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     const browserText = await page.locator('#view').innerText();
     for (const heading of ['ブラウザ / 高度な検索', 'フィルターデッキ / Custom Study', 'ノートタイプ / フィールド / カードテンプレート', 'FSRS-6 / デッキオプション']) assert.ok(browserText.includes(heading), `${name}: ${heading}`);
     assert.ok(browserText.includes('Capital of Japan?'), `${name}: generated note searchable`);
+
+    stage = 'apkg-roundtrip';
+    process.stdout.write(`e2e:${name}:${stage}\n`);
+    const downloadPromise = page.waitForEvent('download');
+    await page.evaluate(async () => {
+      const module = await import('./assets/anki/anki-package.js');
+      await module.exportAnkiPackage();
+    });
+    const download = await downloadPromise;
+    assert.ok(download.suggestedFilename().endsWith('.apkg'), `${name}: Anki package filename`);
+    const packageBytes = await downloadBuffer(download);
+    assert.ok(packageBytes.length > 1000, `${name}: Anki package has SQLite payload`);
+    await page.locator('#import-file').setInputFiles({ name: 'roundtrip.apkg', mimeType: 'application/octet-stream', buffer: packageBytes });
+    await page.waitForSelector('#status-message:not([hidden])');
+    await page.waitForFunction(() => document.getElementById('status-message')?.textContent?.includes('Ankiパッケージを読み込みました'));
+    await page.waitForTimeout(800);
+    await page.waitForLoadState('networkidle');
+    await page.locator('[data-route="anki"]').click();
+    await page.waitForTimeout(250);
+    assert.ok((await page.locator('#view').innerText()).includes('Capital of Japan?'), `${name}: APKG roundtrip preserved note`);
 
     stage = 'reload-persistence';
     process.stdout.write(`e2e:${name}:${stage}\n`);

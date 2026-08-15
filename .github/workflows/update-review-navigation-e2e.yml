@@ -1,0 +1,36 @@
+name: Update review navigation E2E
+
+on:
+  push:
+    branches:
+      - agent/easier-decks-card-numbers-fsrs
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/easier-decks-card-numbers-fsrs
+      - name: Align review navigation with deck overview flow
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/full-function.e2e.mjs')
+          s=p.read_text()
+          old="    stage='review-and-scratch';\n    const deckButton=page.locator('.deck-name-button').filter({hasText:'ReviewDeck'}).first();"
+          new="    stage='review-and-scratch';\n    await page.locator('[data-route=\"home\"]').click();\n    const deckButton=page.locator('.deck-name-button').filter({hasText:'ReviewDeck'}).first();"
+          if old not in s: raise SystemExit('target not found')
+          p.write_text(s.replace(old,new))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/full-function.e2e.mjs
+          git commit -m "align review navigation E2E with deck overview flow"
+          git push origin HEAD:agent/easier-decks-card-numbers-fsrs

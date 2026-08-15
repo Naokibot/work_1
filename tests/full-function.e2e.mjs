@@ -201,7 +201,7 @@ async function testEngine(name, engine) {
       const u=new URL(request.url()); const cb=u.searchParams.get('callback');
       return route.fulfill({status:200,contentType:'application/javascript',body:`${cb}(${JSON.stringify({ok:true,serverTime:new Date().toISOString(),cards:[],history:[],syncResults:[]})});`});
     });
-    await page.evaluate(async()=>{const db=await import('./assets/storage/db.js');const s=await db.getSettings();await db.saveSettings({...s,gasUrl:'https://script.google.com/macros/s/test/exec',syncSecret:'0123456789abcdef',autoSync:false});});
+    await page.evaluate(async()=>{const db=await import('./assets/storage/db.js');const s=await db.getSettings();await db.saveSettings({...s,gasUrl:'https://script.google.com/macros/s/abcdefghijklmnop/exec',syncSecret:'0123456789abcdef',autoSync:false});});
     await page.locator('#sync-button').click();
     await page.waitForFunction(()=>document.getElementById('status-message')?.textContent?.includes('同期完了'),null,{timeout:15000});
 

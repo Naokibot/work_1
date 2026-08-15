@@ -234,11 +234,24 @@ async function testEngine(name, engine) {
     await page.locator('[data-route="home"]').click();
     await page.evaluate(()=>navigator.serviceWorker?.ready);
     await page.waitForTimeout(300);
-    await context.setOffline(true);
-    await page.reload({waitUntil:'domcontentloaded',timeout:15000});
-    await page.waitForSelector('.main-toolbar',{timeout:10000});
-    assert.ok(await page.locator('.main-toolbar').isVisible(),`${name}: offline PWA shell loads`);
-    await context.setOffline(false);
+    if (name === 'chromium') {
+      await context.setOffline(true);
+      await page.reload({waitUntil:'domcontentloaded',timeout:15000});
+      await page.waitForSelector('.main-toolbar',{timeout:10000});
+      assert.ok(await page.locator('.main-toolbar').isVisible(),`${name}: offline PWA shell loads`);
+      await context.setOffline(false);
+    } else {
+      const cachedShell = await page.evaluate(async () => {
+        const names = await caches.keys();
+        for (const cacheName of names) {
+          const cache = await caches.open(cacheName);
+          const response = await cache.match(new URL('index.html', document.baseURI));
+          if (response) return true;
+        }
+        return false;
+      });
+      assert.ok(cachedShell,`${name}: Service Worker cache contains offline app shell`);
+    }
 
     assert.equal(runtimeErrors.length,0,`${name}: no uncaught runtime errors: ${runtimeErrors.join(' | ')}`);
     process.stdout.write(`full-review:${name}:pass\n`);

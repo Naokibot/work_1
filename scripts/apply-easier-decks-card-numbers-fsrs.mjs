@@ -46,7 +46,7 @@ await replace('src/app/app.ts',
       const deck = byId<HTMLSelectElement>('note-deck');
       deck.replaceChildren(...state.decks.filter((item) => item.profileId === state.activeProfileId).map((item) => new Option(item.name, item.id, false, item.id === created.id)));
       deck.value = created.id;
-      this.showStatus(`${created.name} を作成して選択しました。`);
+      this.showStatus(created.name + ' を作成して選択しました。');
     } catch (error) { byId<HTMLElement>('card-form-error').textContent = error instanceof Error ? error.message : 'デッキを作成できませんでした。'; }
   }
 
@@ -80,7 +80,7 @@ await replace('src/anki/collection.ts',
       .filter((card) => !card.deletedAt && (card.profileId ?? DEFAULT_PROFILE_ID) === full.profileId)
       .map((card) => /^\\d+$/u.test((card.cardNumber ?? '').trim()) ? Number(card.cardNumber) : null)
       .filter((value): value is number => value !== null && value > 0));
-    if (used.has(requested)) throw new Error(`カード番号 ${requested} は使用済みです。別の番号を選んでください。`);
+    if (used.has(requested)) throw new Error('カード番号 ' + requested + ' は使用済みです。別の番号を選んでください。');
     let candidate = requested;
     cards = cards.map((card) => {
       while (used.has(candidate)) candidate += 1;

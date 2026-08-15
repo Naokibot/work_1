@@ -1,9 +1,9 @@
 {
   "name": "work-1-study-cards",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
-  "description": "iPad-first offline Anki-style spaced repetition PWA with FSRS-6 and Google Sheets card/history sync.",
+  "description": "Offline-first Anki-compatible study PWA with FSRS, note/card templates, Anki package interoperability, and optional Google Sheets sync.",
   "scripts": {
     "lint": "node scripts/lint.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -21,6 +21,9 @@
     "node": ">=20"
   },
   "dependencies": {
-    "mathjax": "3.2.2"
+    "fflate": "0.8.3",
+    "fzstd": "0.1.1",
+    "mathjax": "3.2.2",
+    "sql.js": "1.14.1"
   }
 }

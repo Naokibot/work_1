@@ -11,7 +11,7 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "security": "node scripts/security-check.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run security",
-    "e2e": "npm run build && node tests/browser.e2e.mjs && node tests/full-function.e2e.mjs"
+    "e2e": "npm run build && node tests/browser.e2e.mjs && node tests/full-function.e2e.mjs && node tests/persistence.e2e.mjs"
   },
   "devDependencies": {
     "typescript": "5.8.3",

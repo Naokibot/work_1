@@ -1,3 +1,4 @@
+import { exportCsv, exportJson } from '../storage/backup.js';
 import { exportAnkiPackage, importAnkiPackage } from './anki-package.js';
 
 function status(message: string, error = false): void {
@@ -31,7 +32,7 @@ export function installAnkiPackageHooks(): void {
         input.value = '';
       }
     })();
-  }, { capture: false });
+  });
 
   document.querySelector<HTMLButtonElement>('[data-menu="file"]')?.addEventListener('click', (event) => {
     event.stopImmediatePropagation();
@@ -40,10 +41,7 @@ export function installAnkiPackageHooks(): void {
     else if (choice === '2') {
       status('Ankiパッケージを作成しています…');
       void exportAnkiPackage().then(() => status('Anki互換 .apkg を作成しました。')).catch((error) => status(error instanceof Error ? error.message : 'Ankiパッケージの書き出しに失敗しました。', true));
-    } else if (choice === '3' || choice === '4') {
-      // Let the normal application menu handle JSON/CSV on a synthetic click path.
-      const route = choice === '3' ? 'json' : 'csv';
-      window.dispatchEvent(new CustomEvent('work1-export', { detail: route }));
-    }
+    } else if (choice === '3') void exportJson();
+    else if (choice === '4') void exportCsv();
   });
 }

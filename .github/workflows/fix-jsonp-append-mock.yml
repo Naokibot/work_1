@@ -1,0 +1,36 @@
+name: Fix JSONP Append Mock
+
+on:
+  push:
+    branches: [review-full-function-20260815]
+    paths:
+      - .github/workflows/fix-jsonp-append-mock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: review-full-function-20260815
+      - name: Patch JSONP append interception
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/full-function.e2e.mjs')
+          s=p.read_text()
+          old="""      const nativeAppend = Element.prototype.appendChild;\n      Element.prototype.appendChild = function(node) {\n        if (this === document.head && node instanceof HTMLScriptElement && node.src.startsWith('https://script.google.com/macros/s/')) {\n          const callback = new URL(node.src).searchParams.get('callback');\n          setTimeout(() => {\n            if (callback && typeof window[callback] === 'function') {\n              window[callback]({ ok:true, serverTime:new Date().toISOString(), cards:[], history:[], syncResults:[] });\n            }\n          }, 0);\n          return node;\n        }\n        return nativeAppend.call(this, node);\n      };\n"""
+          new="""      const nativeAppend = Element.prototype.append;\n      Element.prototype.append = function(...nodes) {\n        const intercepted = this === document.head && nodes.find(node => node instanceof HTMLScriptElement && node.src.startsWith('https://script.google.com/macros/s/'));\n        if (intercepted) {\n          const callback = new URL(intercepted.src).searchParams.get('callback');\n          setTimeout(() => {\n            if (callback && typeof window[callback] === 'function') {\n              window[callback]({ ok:true, serverTime:new Date().toISOString(), cards:[], history:[], syncResults:[] });\n            }\n          }, 0);\n          return;\n        }\n        return nativeAppend.apply(this, nodes);\n      };\n"""
+          if old not in s: raise SystemExit('appendChild mock block not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "Hotaru(Naokibot)"
+          git config user.email "sagakatsuyuki.555@gmail.com"
+          git add tests/full-function.e2e.mjs
+          git commit -m "match JSONP append API in sync acceptance"
+          git push origin HEAD:review-full-function-20260815

@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import { evaluateFsrs, minimumRecommendedRetention, optimizeFsrsParameters, rescheduleForRetention } from '../dist/assets/anki/fsrs-tools.js';
+import { createDefaultAnkiState, emptyCard } from '../dist/assets/anki/defaults.js';
+const history=Array.from({length:30},(_,i)=>({id:`h${i}`,cardId:`c${i%3}`,questionSnapshot:'q',tags:[],rating:i%7===0?'again':'good',isCorrect:i%7!==0,responseMs:1000,reviewedAt:new Date(Date.UTC(2026,0,1+i)).toISOString(),nextDue:new Date(Date.UTC(2026,0,2+i)).toISOString(),device:'test',requestId:`r${i}`}));
+test('FSRS evaluation produces finite metrics',()=>{const r=evaluateFsrs(history);assert.ok(Number.isFinite(r.logLoss));assert.ok(Number.isFinite(r.rmse));assert.ok(r.reviews>0)});
+test('optimizer returns 21 finite parameters',()=>{const p=optimizeFsrsParameters(history);assert.equal(p.length,21);assert.ok(p.every(Number.isFinite))});
+test('recommended retention and rescheduling are bounded',()=>{const state=createDefaultAnkiState(),preset=state.presets[0];const card={...emptyCard(new Date('2026-01-01T00:00:00Z')),schedule:{...emptyCard().schedule,reps:10,stability:30,difficulty:5,lastReview:'2026-01-01T00:00:00Z',due:'2026-02-01T00:00:00Z'}};const r=minimumRecommendedRetention([card],preset);assert.ok(r>=.75&&r<=.96);const [next]=rescheduleForRetention([card],preset,new Date('2026-01-10T00:00:00Z'));assert.notEqual(next.schedule.due,card.schedule.due)});

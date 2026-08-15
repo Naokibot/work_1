@@ -1,59 +1,38 @@
-# Review record
+# Release review record
 
-## 2026-08-15 card number, persistence, and iPad button fix
+## Anki-core expansion review — 2026-08-15
 
-### Review 1 — Functionality
+### 1. Feature-model review
+The collection model was changed from a single flat-card model to an Anki-style note/card model while retaining compatibility with pre-existing cards. Notes own fields, tags, a note type, and a deck; card templates generate one or more sibling cards. Built-in Basic, reversed, optional reversed, typed-answer, Cloze, and Image Occlusion note types are present. Custom note types, fields, templates, and CSS are stored in IndexedDB as collection state.
 
-Reviewed card creation/editing/duplication, review sessions, correct/incorrect tracking, backup/export, navigation, dialogs, and Service Worker updates.
+### 2. Scheduling review
+The former small custom interval heuristic was replaced by an FSRS-6 implementation with 21 parameters, desired retention, learning/relearning steps, same-day behavior, maximum interval, and Easy Days adjustment. Review uses per-deck presets. Failed reviews update lapses, leech policy, and learning state; sibling burying and filtered-deck reschedule/no-reschedule behavior are applied before moving to the next card.
 
-Changes:
+The scheduler is intended to follow FSRS-6. The local parameter optimizer is intentionally described as a lightweight optimizer and is not claimed to reproduce every official Anki optimizer result numerically.
 
-- Added a user-editable `cardNumber` field. It is separate from the internal immutable card ID, so changing the visible number does not break review history.
-- Card numbers are shown in the card list and review screen and are included in search.
-- JSON backup naturally includes card numbers; CSV export now has a `CardNumber` column.
-- Review history stores a card-number snapshot in local data for future display/inspection while continuing to link by internal card ID.
-- Duplicate cards intentionally start with an empty visible number to avoid accidental duplicate numbering.
+### 3. Data-integrity review
+- Cards, history, notes, decks, profiles, presets, note types, filtered decks, saved searches, undo records, session state, settings, and snapshots are persisted in IndexedDB.
+- Review writes the updated card and append-only review history before remote synchronization.
+- Existing card/history Google Sheets synchronization is preserved.
+- Legacy remote card payloads do not erase Anki-specific local metadata absent from the old Sheets schema.
+- Complete JSON backup carries the entire local collection state, not just the legacy cards.
+- Automatic snapshots and collection integrity checks are available.
 
-### Review 2 — Same-device data integrity
+### 4. Review/browser feature review
+Reviewed search parsing, hierarchical tags/decks, flags, marked state, suspend/bury, due-date changes, reset, reposition, deck moves, tags, find/replace, note regeneration, saved searches, filtered decks, typed answers, Cloze siblings, Image Occlusion masks, media, TTS, answer timing, keyboard shortcuts, and next-interval previews.
 
-Cards and review history were already stored in IndexedDB. Review answers update the card statistics and append history before any cloud synchronization attempt. This behavior is retained.
+### 5. iPad/WebKit review
+The application keeps the prior iPad compatibility work: content-versioned Service Worker cache, dialog fallbacks, ResizeObserver fallback, persistent-storage request, Pointer Events scratchpad, safe-area layout, and non-hover controls. A browser E2E test now runs the same persistence/review workflow in both Chromium and Playwright WebKit.
 
-Additional safeguards:
+### 6. Security review
+- Rich card/template markup is parsed through an allow-list sanitizer before being inserted into the document.
+- JavaScript evaluation and arbitrary add-on code execution are not enabled.
+- Media URLs are restricted to supported safe schemes/embedded data.
+- Existing HMAC synchronization, nonce/timestamp protection, formula-injection handling on the Apps Script side, and CSP remain in place.
+- The build includes a secret/dangerous-pattern scan, dependency audit, and CodeQL workflow.
 
-- The app requests persistent browser storage when supported.
-- Settings now explicitly explain that cards, card numbers, and correct/incorrect history remain on the same device/browser installation unless site data is cleared.
-- JSON backup remains available for protection against browser-data deletion.
-- Remote synchronization from an older Apps Script deployment no longer removes a locally stored card number when the server response does not contain that field.
+### 7. Honest compatibility boundary
+`ANKI_PARITY.md` is the authoritative compatibility matrix. Native AnkiWeb protocol identity, arbitrary Python desktop add-ons, exact `.apkg/.colpkg`/SQLite package compatibility, and desktop media-folder filesystem semantics are not falsely labelled as implemented. Browser-safe substitutes are documented.
 
-### Review 3 — iPad / Safari button failure
-
-Found several compatibility/update risks that could make a deployed page render while controls appear unresponsive:
-
-1. The Service Worker cache name was permanently fixed at `work-1-v1`. A new deployment could therefore continue serving stale JavaScript. The build now creates a content-derived cache version so every changed build activates a new cache and removes the old one.
-2. Card/study dialogs depended on `method="dialog"` and `SubmitEvent.submitter`. They now use explicit `type="button"` cancel/close controls and normal submit events.
-3. Dialog opening now has a fallback when `showModal()` is unavailable.
-4. The scratch pad directly constructed `ResizeObserver`. It now has resize/orientation fallbacks so failure of that API cannot prevent the whole app from binding buttons.
-5. `crypto.randomUUID()` now has a secure `getRandomValues()` fallback for older WebKit versions.
-6. Top-level `await` was removed from the application entry point. Initialization errors are surfaced in the status area instead of leaving a silently non-interactive page.
-7. Download object URLs are revoked after a short delay rather than immediately, which is safer for Safari downloads.
-
-### Review 4 — Learning records
-
-- Correct/incorrect counts remain on each card and review history remains append-only locally.
-- Each answer persists card state, history, sync queue, and active session progress.
-- The configured idle timeout is now actually applied: very long idle responses are recorded with `responseMs = 0` and excluded from speed averages while the correct/incorrect result itself is preserved.
-- Incorrect cards continue to be inserted several questions later in the session.
-
-### Review 5 — Security and code quality
-
-- The visible card number is treated as plain text and rendered with `textContent` through the existing DOM helpers.
-- Card-number length is limited to 100 characters.
-- No secrets were added to source.
-- IndexedDB schema does not require a migration because it stores structured objects and the new fields are backward-compatible optional fields.
-- The cloud backend remains backward-compatible: same-device card-number persistence does not require an Apps Script redeployment. Card-number synchronization to Google Sheets can be added separately if desired.
-
-## Validation target
-
-The repository CI must pass lint, TypeScript strict checking, unit tests, build, security checks, and audit after this change. A new unit-test file covers card-number trimming, optional values, and the maximum length.
-
-Physical iPad Safari / Apple Pencil behavior remains a device acceptance test. After deployment, fully close and reopen the Home Screen PWA once so the new Service Worker can take control; the new versioned cache prevents later releases from remaining stuck on an older JavaScript bundle.
+### Required final validation
+The final GitHub release tree must pass CI (lint/typecheck/unit/security/audit plus Chromium/WebKit E2E), CodeQL, and GitHub Pages deployment before this review is considered complete.

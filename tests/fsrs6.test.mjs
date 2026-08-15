@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import { initialSchedule, intervalForRetention, retrievability, scheduleReview, FSRS6_DEFAULT_PARAMETERS } from '../dist/assets/scheduler/scheduler.js';
+test('FSRS-6 uses 21 parameters',()=>assert.equal(FSRS6_DEFAULT_PARAMETERS.length,21));
+test('retrievability at t=S is 0.9',()=>{const now=new Date('2026-01-11T00:00:00Z');const state={...initialSchedule(),stability:10,difficulty:5,reps:5,lastReview:'2026-01-01T00:00:00Z',due:'2026-01-11T00:00:00Z'};assert.ok(Math.abs(retrievability(state,now)-.9)<1e-9)});
+test('higher desired retention creates shorter interval',()=>{assert.ok(intervalForRetention(30,.95)<intervalForRetention(30,.9));});
+test('new card learning steps and easy graduation',()=>{const now=new Date('2026-01-01T00:00:00Z');const initial=initialSchedule(now);const again=scheduleReview(initial,'again',now,{learningStepsMinutes:[1,10]});const easy=scheduleReview(initial,'easy',now,{learningStepsMinutes:[1,10]});assert.equal(again.queue,'learning');assert.equal(again.intervalDays,1/1440);assert.equal(easy.queue,'review');assert.ok(easy.intervalDays>=1)});
+test('maximum interval is respected',()=>{const now=new Date('2026-01-01T00:00:00Z');const state={...initialSchedule(now),stability:500,difficulty:3,reps:20,lastReview:'2025-01-01T00:00:00Z'};const r=scheduleReview(state,'easy',now,{maximumIntervalDays:100});assert.ok(r.intervalDays<=100)});

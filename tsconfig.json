@@ -1,18 +1,1 @@
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "rootDir": "src",
-    "outDir": "dist/assets",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "useDefineForClassFields": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "sourceMap": false,
-    "declaration": false
-  },
-  "include": ["src/**/*.ts"]
-}
+{"compilerOptions":{"target":"ES2022","module":"ES2022","moduleResolution":"Bundler","lib":["ES2022","DOM","DOM.Iterable"],"rootDir":"src","outDir":"dist/assets","strict":true,"noUncheckedIndexedAccess":true,"useDefineForClassFields":true,"skipLibCheck":true,"forceConsistentCasingInFileNames":true,"sourceMap":false,"declaration":false},"include":["src/**/*.ts"]}

@@ -1,9 +1,19 @@
-import type { AppSettings, ReviewHistory, ReviewSession, StudyCard, SyncConflict, SyncQueueItem } from '../types.js';
+import type {
+  AnkiState,
+  AppSettings,
+  CollectionSnapshot,
+  ReviewHistory,
+  ReviewSession,
+  StudyCard,
+  SyncConflict,
+  SyncQueueItem
+} from '../types.js';
+import { normalizeAnkiState } from '../anki/defaults.js';
 
 const DB_NAME = 'work_1_study_cards';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
-type StoreName = 'cards' | 'history' | 'queue' | 'settings' | 'sessions' | 'conflicts';
+type StoreName = 'cards' | 'history' | 'queue' | 'settings' | 'sessions' | 'conflicts' | 'anki' | 'snapshots';
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -34,9 +44,22 @@ export function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('conflicts')) db.createObjectStore('conflicts', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('anki')) db.createObjectStore('anki', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('snapshots')) db.createObjectStore('snapshots', { keyPath: 'id' });
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('Could not open IndexedDB'));
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    request.onerror = () => {
+      dbPromise = null;
+      reject(request.error ?? new Error('Could not open IndexedDB'));
+    };
+    request.onblocked = () => {
+      dbPromise = null;
+      reject(new Error('IndexedDB upgrade is blocked by another open tab. Close the other tab and reload.'));
+    };
   });
   return dbPromise;
 }
@@ -67,8 +90,12 @@ async function deleteOne(storeName: StoreName, key: IDBValidKey): Promise<void> 
   await transactionDone(transaction);
 }
 
-export async function getCards(includeDeleted = false): Promise<StudyCard[]> {
-  const cards = await getAll<StudyCard>('cards');
+export async function getCards(includeDeleted = false, allProfiles = false): Promise<StudyCard[]> {
+  let cards = await getAll<StudyCard>('cards');
+  if (!allProfiles) {
+    const state = await getAnkiState();
+    cards = cards.filter((card) => (card.profileId ?? 'profile_default') === state.activeProfileId);
+  }
   return includeDeleted ? cards : cards.filter((card) => !card.deletedAt);
 }
 
@@ -78,6 +105,15 @@ export function getCard(id: string): Promise<StudyCard | undefined> {
 
 export function saveCard(card: StudyCard): Promise<void> {
   return putOne('cards', card);
+}
+
+export async function saveCards(cards: StudyCard[]): Promise<void> {
+  if (!cards.length) return;
+  const db = await openDatabase();
+  const transaction = db.transaction('cards', 'readwrite');
+  const store = transaction.objectStore('cards');
+  cards.forEach((card) => store.put(card));
+  await transactionDone(transaction);
 }
 
 export function getHistory(): Promise<ReviewHistory[]> {
@@ -111,7 +147,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   lastSyncAt: '1970-01-01T00:00:00.000Z',
   dailyNewLimit: 20,
   dailyReviewLimit: 200,
-  idleTimeoutSeconds: 600
+  idleTimeoutSeconds: 600,
+  showRemainingCount: true,
+  showNextReviewTime: true,
+  spacebarAnswers: true,
+  interruptAudioOnAnswer: true,
+  autoSync: true
 };
 
 export async function getSettings(): Promise<AppSettings> {
@@ -121,6 +162,17 @@ export async function getSettings(): Promise<AppSettings> {
 
 export function saveSettings(settings: AppSettings): Promise<void> {
   return putOne('settings', settings);
+}
+
+export async function getAnkiState(): Promise<AnkiState> {
+  const stored = await getOne<AnkiState>('anki', 'anki');
+  const normalized = normalizeAnkiState(stored);
+  if (!stored) await saveAnkiState(normalized);
+  return normalized;
+}
+
+export function saveAnkiState(state: AnkiState): Promise<void> {
+  return putOne('anki', normalizeAnkiState(state));
 }
 
 export function getCurrentSession(): Promise<ReviewSession | undefined> {
@@ -143,6 +195,23 @@ export function getConflicts(): Promise<SyncConflict[]> {
   return getAll('conflicts');
 }
 
+export function saveSnapshot(snapshot: CollectionSnapshot): Promise<void> {
+  return putOne('snapshots', snapshot);
+}
+
+export async function getSnapshots(): Promise<CollectionSnapshot[]> {
+  return (await getAll<CollectionSnapshot>('snapshots')).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function deleteSnapshot(id: string): Promise<void> {
+  return deleteOne('snapshots', id);
+}
+
+export async function pruneSnapshots(maxCount = 50): Promise<void> {
+  const snapshots = await getSnapshots();
+  await Promise.all(snapshots.slice(maxCount).map((snapshot) => deleteSnapshot(snapshot.id)));
+}
+
 export async function replaceAllData(cards: StudyCard[], history: ReviewHistory[]): Promise<void> {
   const db = await openDatabase();
   const transaction = db.transaction(['cards', 'history'], 'readwrite');
@@ -152,5 +221,20 @@ export async function replaceAllData(cards: StudyCard[], history: ReviewHistory[
   historyStore.clear();
   cards.forEach((card) => cardStore.put(card));
   history.forEach((item) => historyStore.put(item));
+  await transactionDone(transaction);
+}
+
+export async function replaceCollection(cards: StudyCard[], history: ReviewHistory[], anki: AnkiState): Promise<void> {
+  const db = await openDatabase();
+  const transaction = db.transaction(['cards', 'history', 'anki'], 'readwrite');
+  const cardStore = transaction.objectStore('cards');
+  const historyStore = transaction.objectStore('history');
+  const ankiStore = transaction.objectStore('anki');
+  cardStore.clear();
+  historyStore.clear();
+  ankiStore.clear();
+  cards.forEach((card) => cardStore.put(card));
+  history.forEach((item) => historyStore.put(item));
+  ankiStore.put(normalizeAnkiState(anki));
   await transactionDone(transaction);
 }

@@ -1,81 +1,16 @@
 import { App } from './app/app.js';
-
-function closeDialogElement(dialog: HTMLDialogElement): void {
-  const target = dialog as HTMLDialogElement & { close?: () => void };
-  if (typeof target.close === 'function') target.close();
-  else dialog.removeAttribute('open');
-  dialog.classList.remove('dialog-fallback-open');
-}
-
-function prepareDialogCompatibility(): void {
-  document.querySelectorAll<HTMLDialogElement>('dialog').forEach((dialog) => {
-    const target = dialog as HTMLDialogElement & { showModal?: () => void; close?: () => void };
-    if (typeof target.showModal !== 'function') {
-      target.showModal = () => {
-        dialog.setAttribute('open', '');
-        dialog.classList.add('dialog-fallback-open');
-      };
-    }
-    if (typeof target.close !== 'function') {
-      target.close = () => {
-        dialog.removeAttribute('open');
-        dialog.classList.remove('dialog-fallback-open');
-      };
-    }
-  });
-
-  const bindings: Array<[string, string]> = [
-    ['card-close', 'card-dialog'],
-    ['card-cancel', 'card-dialog'],
-    ['study-close', 'study-dialog'],
-    ['study-cancel', 'study-dialog']
-  ];
-  for (const [buttonId, dialogId] of bindings) {
-    const control = document.getElementById(buttonId);
-    const dialog = document.getElementById(dialogId) as HTMLDialogElement | null;
-    control?.addEventListener('click', () => {
-      if (dialog) closeDialogElement(dialog);
-    });
+function prepareDialogs():void{
+  for(const dialog of document.querySelectorAll<HTMLDialogElement>('dialog')){
+    const d=dialog as HTMLDialogElement&{showModal?:()=>void;close?:()=>void};
+    if(typeof d.showModal!=='function') d.showModal=()=>dialog.setAttribute('open','');
+    if(typeof d.close!=='function') d.close=()=>dialog.removeAttribute('open');
+  }
+  const bindings:Array<[string,string]>=[['card-close','card-dialog'],['card-cancel','card-dialog'],['study-close','study-dialog'],['study-cancel','study-dialog']];
+  for(const [buttonId,dialogId] of bindings){
+    document.getElementById(buttonId)?.addEventListener('click',()=>{const d=document.getElementById(dialogId) as HTMLDialogElement|null;d?.close();});
   }
 }
-
-async function requestPersistentStorage(): Promise<void> {
-  try {
-    if (navigator.storage && typeof navigator.storage.persist === 'function') {
-      await navigator.storage.persist();
-    }
-  } catch {
-    // IndexedDB still works when persistent-storage requests are unsupported or denied.
-  }
-}
-
-async function registerServiceWorker(): Promise<void> {
-  if (!('serviceWorker' in navigator)) return;
-  try {
-    const url = new URL('sw.js', document.baseURI);
-    await navigator.serviceWorker.register(url, { scope: './' });
-  } catch {
-    // The app remains usable online if service-worker registration is unavailable.
-  }
-}
-
-function showBootError(error: unknown): void {
-  const status = document.getElementById('status-message');
-  if (!status) return;
-  status.textContent = error instanceof Error
-    ? `アプリの初期化に失敗しました: ${error.message}`
-    : 'アプリの初期化に失敗しました。ページを再読み込みしてください。';
-  status.classList.add('is-error');
-  status.removeAttribute('hidden');
-}
-
-try {
-  prepareDialogCompatibility();
-  void requestPersistentStorage();
-  const app = new App();
-  void app.init()
-    .then(() => registerServiceWorker())
-    .catch(showBootError);
-} catch (error) {
-  showBootError(error);
-}
+async function persistent():Promise<void>{try{await navigator.storage?.persist?.()}catch{}}
+async function serviceWorker():Promise<void>{if(!('serviceWorker'in navigator))return;try{await navigator.serviceWorker.register(new URL('sw.js',document.baseURI),{scope:'./'})}catch{}}
+function bootError(error:unknown):void{const s=document.getElementById('status-message');if(!s)return;s.textContent=error instanceof Error?`初期化に失敗しました: ${error.message}`:'初期化に失敗しました。';s.classList.add('is-error');s.removeAttribute('hidden');}
+try{prepareDialogs();void persistent();const app=new App();void app.init().then(serviceWorker).catch(bootError);}catch(e){bootError(e);}

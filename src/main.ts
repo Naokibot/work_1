@@ -1,4 +1,6 @@
 import { App } from './app/app.js';
+import { installAnkiPackageHooks } from './anki/package-hooks.js';
+
 function prepareDialogs():void{
   for(const dialog of document.querySelectorAll<HTMLDialogElement>('dialog')){
     const d=dialog as HTMLDialogElement&{showModal?:()=>void;close?:()=>void};
@@ -13,4 +15,4 @@ function prepareDialogs():void{
 async function persistent():Promise<void>{try{await navigator.storage?.persist?.()}catch{}}
 async function serviceWorker():Promise<void>{if(!('serviceWorker'in navigator))return;try{await navigator.serviceWorker.register(new URL('sw.js',document.baseURI),{scope:'./'})}catch{}}
 function bootError(error:unknown):void{const s=document.getElementById('status-message');if(!s)return;s.textContent=error instanceof Error?`初期化に失敗しました: ${error.message}`:'初期化に失敗しました。';s.classList.add('is-error');s.removeAttribute('hidden');}
-try{prepareDialogs();void persistent();const app=new App();void app.init().then(serviceWorker).catch(bootError);}catch(e){bootError(e);}
+try{prepareDialogs();void persistent();installAnkiPackageHooks();const app=new App();void app.init().then(serviceWorker).catch(bootError);}catch(e){bootError(e);}

@@ -20,7 +20,9 @@ jobs:
         with:
           node-version: 22
       - name: Apply implementation
-        run: python scripts/apply-japanese-deck-stats.py
+        run: |
+          sed -i "s/?? ranges\[0\];/?? ranges[0]!;/" scripts/apply-japanese-deck-stats.py
+          python scripts/apply-japanese-deck-stats.py
       - name: Validate before commit
         run: |
           npm install --ignore-scripts --no-audit

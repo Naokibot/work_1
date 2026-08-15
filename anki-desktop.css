@@ -1,0 +1,66 @@
+/* Anki desktop fidelity layer. Keeps the browser implementation visually and operationally close to current desktop Anki without claiming to be the official app. */
+:root{
+  --anki-bg:#f5f5f5;--anki-panel:#fff;--anki-line:#d6d6d6;--anki-line-dark:#b8b8b8;
+  --anki-text:#202124;--anki-muted:#70757a;--anki-blue:#2f80c9;--anki-red:#d1493f;--anki-green:#4a9b55;
+}
+body{background:var(--anki-bg)!important;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif!important}
+.desktop-chrome{background:#f1f1f1!important;border-bottom:1px solid #bdbdbd!important;box-shadow:none!important}
+.menu-bar{height:28px!important;background:#ececec!important;border-bottom:1px solid #d0d0d0!important;padding-inline:7px!important}
+.menu-item{font-size:12px!important;padding:4px 8px!important;border-radius:2px!important}
+.main-toolbar{height:56px!important;padding:3px 8px!important;gap:1px!important;background:linear-gradient(#fafafa,#e9e9e9)!important}
+.toolbar-button{min-width:72px!important;border-radius:3px!important;font-size:11px!important;gap:0!important;padding:2px 7px!important}
+.toolbar-button.is-active,.toolbar-button:hover{background:linear-gradient(#fff,#dedede)!important;border-color:#b7b7b7!important}
+.toolbar-icon{font-size:20px!important;line-height:22px!important}
+.workspace{max-width:none!important;width:min(1120px,100%)!important;padding:18px 22px 56px!important}
+.anki-page,.settings-card,.anki-panel,.section,.deck-overview{box-shadow:none!important;border-radius:2px!important;border-color:var(--anki-line)!important}
+.deck-page{max-width:900px!important}
+.deck-title-row{grid-template-columns:1fr 72px 72px 34px!important;padding:8px 10px 5px!important;background:#fafafa!important}
+.deck-row{grid-template-columns:1fr 72px 72px 34px!important;min-height:34px!important;padding:0 10px!important}
+.deck-name-button{padding:5px 2px!important;color:#2267a7!important;font-size:13px!important}
+.deck-count{font-size:12px!important}
+.deck-gear{width:27px;height:25px;padding:0!important;border:1px solid transparent!important;background:transparent!important;border-radius:3px!important;color:#777!important}
+.deck-gear:hover{border-color:#c8c8c8!important;background:#fff!important}
+.deck-footer{padding:10px!important;background:#fafafa!important}
+.deck-overview{max-width:760px!important;padding:24px 28px!important}
+.deck-overview h2{font-size:22px!important;margin-bottom:16px!important}
+.study-counts{font-size:14px!important;margin-bottom:18px!important}
+.study-now{font-size:14px!important;min-width:150px!important;padding:7px 18px!important}
+.review-screen{background:#fff!important}
+.review-header{height:34px!important;background:#f4f4f4!important;border-bottom:1px solid #d2d2d2!important;padding-inline:8px!important}
+.review-main{padding:12px 14px 92px!important}
+.review-card{max-width:980px!important;padding:18px 20px!important;min-height:270px!important}
+.review-question,.review-answer{font-size:24px!important;line-height:1.5!important}
+.show-answer-button{min-width:150px!important;padding:7px 16px!important;margin-top:30px!important}
+.rating-row{grid-template-columns:repeat(4,minmax(100px,170px))!important;justify-content:center!important;gap:6px!important;padding:7px 10px calc(7px + env(safe-area-inset-bottom))!important;background:#f4f4f4!important}
+.rating-button{min-height:46px!important;border-radius:3px!important;font-size:13px!important}
+.dialog{border-radius:3px!important;background:#efefef!important;box-shadow:0 10px 34px rgba(0,0,0,.28)!important}
+.dialog-titlebar{background:#e8e8e8!important;padding-block:6px!important}
+.note-editor-toolbar{background:#e5e5e5!important;border-radius:2px!important;margin:6px 0!important}
+.note-field-wrap textarea{min-height:78px!important}
+.anki-browser-shell{display:grid!important;grid-template-columns:220px minmax(0,1fr)!important;gap:0!important;border:1px solid var(--anki-line-dark)!important;background:#fff!important;min-height:620px!important}
+.anki-browser-sidebar{border-right:1px solid var(--anki-line)!important;background:#f4f4f4!important;overflow:auto!important}
+.anki-browser-main{min-width:0!important;background:#fff!important}
+.anki-browser-topbar{display:flex!important;gap:6px!important;align-items:center!important;padding:6px!important;border-bottom:1px solid var(--anki-line)!important;background:#f6f6f6!important}
+.anki-browser-list{max-height:370px!important;border:0!important;border-bottom:1px solid var(--anki-line)!important;border-radius:0!important}
+.anki-browser-row{grid-template-columns:24px 1fr!important;min-height:26px!important;padding:3px 6px!important;font-size:12px!important}
+.anki-browser-row:nth-child(even){background:#fbfbfb!important}
+.anki-browser-row:hover{background:#e8f2fb!important}
+.anki-browser-editor{padding:10px!important;background:#f8f8f8!important;min-height:220px!important}
+.anki-sidebar-section{border-bottom:1px solid #ddd!important}
+.anki-sidebar-section>button{width:100%!important;text-align:left!important;border:0!important;background:transparent!important;padding:5px 8px!important;font-size:12px!important}
+.anki-sidebar-section>button:hover{background:#e6e6e6!important}
+.stats-layout{max-width:900px!important;margin:auto!important}
+.stats-tabs{display:flex!important;gap:0!important;border-bottom:1px solid #bbb!important;margin-bottom:10px!important}
+.stats-tab{border:1px solid #bbb!important;border-bottom:0!important;background:#e9e9e9!important;padding:5px 12px!important;margin-right:-1px!important;border-radius:3px 3px 0 0!important;font-size:12px!important}
+.stats-tab.is-active{background:#fff!important;font-weight:600!important}
+.stats-graph{background:#fff!important;border:1px solid #d4d4d4!important;padding:10px!important;margin:10px 0!important}
+.stats-graph h3{font-size:14px!important;font-weight:600!important;margin:0 0 8px!important}
+.anki-statusbar{position:fixed;left:0;right:0;bottom:0;height:22px;z-index:35;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border-top:1px solid #c8c8c8;background:#ededed;color:#666;font-size:11px;pointer-events:none}
+.anki-menu-popup{position:fixed;z-index:200;min-width:190px;padding:4px 0;border:1px solid #999;background:#fff;box-shadow:0 5px 16px rgba(0,0,0,.2);font-size:12px}
+.anki-menu-popup button{display:flex;width:100%;justify-content:space-between;border:0;background:transparent;padding:5px 22px 5px 24px;text-align:left}
+.anki-menu-popup button:hover{background:#2f78bd;color:#fff}
+.anki-menu-separator{height:1px;background:#ddd;margin:4px 0}
+@media(max-width:760px){
+  .menu-bar{display:none!important}.main-toolbar{height:48px!important}.toolbar-button{min-width:56px!important;font-size:10px!important}.toolbar-icon{font-size:18px!important}.workspace{padding:10px 8px 42px!important}
+  .anki-browser-shell{grid-template-columns:1fr!important}.anki-browser-sidebar{display:none!important}.deck-title-row,.deck-row{grid-template-columns:1fr 54px 54px 30px!important}.rating-row{grid-template-columns:repeat(4,1fr)!important}.review-question,.review-answer{font-size:21px!important}
+}

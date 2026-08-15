@@ -97,7 +97,7 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     process.stdout.write(`e2e:${name}:${stage}\n`);
     if (await page.locator('#review-screen:not([hidden])').count()) await page.locator('#review-close').click();
     await page.locator('[data-route="anki"]').click();
-    await page.waitForTimeout(250);
+    await page.waitForFunction(() => document.getElementById('view')?.textContent?.includes('ブラウザ / 高度な検索'));
     const browserText = await page.locator('#view').innerText();
     for (const heading of ['ブラウザ / 高度な検索', 'フィルターデッキ / Custom Study', 'ノートタイプ / フィールド / カードテンプレート', 'FSRS-6 / デッキオプション']) assert.ok(browserText.includes(heading), `${name}: ${heading}`);
     assert.ok(browserText.includes('Capital of Japan?'), `${name}: generated note searchable`);
@@ -152,7 +152,7 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     process.stdout.write(`e2e:${name}:${stage}\n`);
     await page.reload({ waitUntil: 'networkidle' });
     await page.locator('[data-route="anki"]').click();
-    await page.waitForTimeout(250);
+    await page.waitForFunction(() => document.getElementById('view')?.textContent?.includes('ブラウザ / 高度な検索'));
     assert.ok((await page.locator('#view').innerText()).includes('Capital of Japan?'), `${name}: IndexedDB persists after reload`);
     assert.equal(errors.length, 0, `${name}: no uncaught runtime errors`);
     process.stdout.write(`e2e:${name}:pass\n`);

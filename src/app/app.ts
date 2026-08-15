@@ -63,7 +63,10 @@ export class App {
     await this.updateSyncBadge();
     await this.render();
     const session = await getCurrentSession();
-    if (session && session.cursor < session.queue.length) this.showStatus(`途中の学習があります（${session.cursor}/${session.queue.length}）。`, false, 7000);
+    if (session && session.cursor < session.queue.length) {
+      this.showStatus(`途中の学習を復元します（${session.cursor}/${session.queue.length}）。`, false, 7000);
+      await this.review.resume(session);
+    }
     if (migrated.migratedCards || migrated.notesAdded) this.showStatus(`既存データを移行しました：カード${migrated.migratedCards}件・ノート${migrated.notesAdded}件。`);
     if (navigator.onLine) void this.autoSync();
   }

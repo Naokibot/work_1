@@ -66,7 +66,7 @@ class ImageOcclusionEditor {
   private undoStack: ImageOcclusionMask[][] = [];
   private redoStack: ImageOcclusionMask[][] = [];
   private polygon: Point[] = [];
-  private gesture: { kind: 'draw' | 'move' | 'resize'; id?: string; start: Point; original?: ImageOcclusionMask } | null = null;
+  private gesture: { kind: 'draw' | 'move' | 'resize'; id?: string; start: Point; original?: ImageOcclusionMask; before?: ImageOcclusionMask[] } | null = null;
   private draft: HTMLElement | null = null;
   private imageDataUrl = '';
 
@@ -156,7 +156,7 @@ class ImageOcclusionEditor {
     if (file.size > 30 * 1024 * 1024) { this.setStatus('画像は30MB以下にしてください。', true); return; }
     const reader = new FileReader();
     const data = await new Promise<string>((resolve, reject) => { reader.onload=()=>resolve(String(reader.result??''));reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file); });
-    this.imageDataUrl=data;this.image.src=data;this.image.hidden=false;this.stage.querySelector<HTMLElement>('[data-empty]')?.setAttribute('hidden','');this.masks=[];this.pushSnapshot([]);this.render();
+    this.imageDataUrl=data;this.image.src=data;this.image.hidden=false;this.stage.querySelector<HTMLElement>('[data-empty]')?.setAttribute('hidden','');this.masks=[];this.undoStack=[];this.redoStack=[];this.render();
   }
 
   private point(event: PointerEvent): Point {
@@ -170,7 +170,7 @@ class ImageOcclusionEditor {
     if (target) {
       const id=target.dataset.maskId??null;this.selectedId=id;this.render();
       const mask=this.masks.find((item)=>item.id===id);if(!mask)return;
-      this.gesture={kind:handle?'resize':'move',id:mask.id,start:this.point(event),original:{...mask,points:mask.points?.map((point)=>({...point}))}};
+      this.gesture={kind:handle?'resize':'move',id:mask.id,start:this.point(event),original:{...mask,points:mask.points?.map((point)=>({...point}))},before:cloneMasks(this.masks)};
       this.stage.setPointerCapture(event.pointerId);event.preventDefault();return;
     }
     if(this.tool==='select') { this.selectedId=null;this.render();return; }
@@ -197,7 +197,7 @@ class ImageOcclusionEditor {
   private pointerUp(event: PointerEvent): void {
     if(!this.gesture)return;const p=this.point(event),g=this.gesture;this.gesture=null;try{this.stage.releasePointerCapture(event.pointerId)}catch{}
     if(g.kind==='draw'){this.removeDraft();const left=Math.min(g.start.x,p.x),top=Math.min(g.start.y,p.y),width=Math.abs(p.x-g.start.x),height=Math.abs(p.y-g.start.y);if(width>.4&&height>.4)this.commit([{id:uid('io'),shape:this.tool==='ellipse'?'ellipse':'rect',x:left,y:top,width,height,answer:''}]);}
-    else this.saveHistory();
+    else {if(g.before){this.undoStack.push(g.before);this.redoStack=[];}this.render();}
   }
 
   private showDraft(a:Point,b:Point,shape:Tool):void{this.removeDraft();const node=document.createElement('div');node.className='io-editor-draft';const left=Math.min(a.x,b.x),top=Math.min(a.y,b.y),width=Math.abs(a.x-b.x),height=Math.abs(a.y-b.y);Object.assign(node.style,{left:left+'%',top:top+'%',width:width+'%',height:height+'%',borderRadius:shape==='ellipse'?'50%':'0'});this.stage.append(node);this.draft=node;}
@@ -206,7 +206,6 @@ class ImageOcclusionEditor {
   private finishPolygon():void{if(this.polygon.length<3)return;const points=[...this.polygon],xs=points.map((p)=>p.x),ys=points.map((p)=>p.y),x=Math.min(...xs),y=Math.min(...ys),width=Math.max(...xs)-x,height=Math.max(...ys)-y;this.polygon=[];this.finishPolygonButton.hidden=true;this.removeDraft();this.commit([{id:uid('io'),shape:'polygon',x,y,width,height,points,answer:''}]);}
 
   private commit(additions:ImageOcclusionMask[]):void{this.undoStack.push(cloneMasks(this.masks));this.redoStack=[];this.masks=[...this.masks,...additions];this.selectedId=additions.at(-1)?.id??null;this.render();}
-  private saveHistory():void{if(!this.gesture){this.undoStack.push(cloneMasks(this.masks));this.redoStack=[];this.render();}}
   private undo():void{const previous=this.undoStack.pop();if(!previous)return;this.redoStack.push(cloneMasks(this.masks));this.masks=previous;this.selectedId=null;this.render();}
   private redo():void{const next=this.redoStack.pop();if(!next)return;this.undoStack.push(cloneMasks(this.masks));this.masks=next;this.selectedId=null;this.render();}
   private deleteSelected():void{if(!this.selectedId)return;const before=cloneMasks(this.masks);this.masks=this.masks.filter((mask)=>mask.id!==this.selectedId);if(this.masks.length!==before.length){this.undoStack.push(before);this.redoStack=[];}this.selectedId=null;this.render();}
@@ -240,5 +239,5 @@ let editor:ImageOcclusionEditor|null=null;
 export function installImageOcclusionEditor():void{
   if(!document.getElementById('io-editor-style')){const styles=style();styles.id='io-editor-style';document.head.append(styles);}
   editor=new ImageOcclusionEditor();
-  document.addEventListener('click',(event)=>{const button=(event.target as HTMLElement).closest<HTMLButtonElement>('#note-fields button');if(!button||!button.textContent?.includes('Image Occlusion'))return;const select=document.getElementById('note-type') as HTMLSelectElement|null;if(!select)return;void getAnkiState().then((state)=>{const type=state.noteTypes.find((item)=>item.id===select.value);if(type?.kind!=='image-occlusion')return;event.preventDefault();event.stopImmediatePropagation();editor?.open();});},true);
+  document.addEventListener('click',(event)=>{const button=(event.target as HTMLElement).closest<HTMLButtonElement>('#note-fields button');if(!button||!button.textContent?.includes('Image Occlusion'))return;const select=document.getElementById('note-type') as HTMLSelectElement|null;if(!select)return;event.preventDefault();event.stopImmediatePropagation();void getAnkiState().then((state)=>{const type=state.noteTypes.find((item)=>item.id===select.value);if(type?.kind!=='image-occlusion')return;editor?.open();});},true);
 }

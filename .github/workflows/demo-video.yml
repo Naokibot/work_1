@@ -1,0 +1,38 @@
+name: Demo Video
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'index.html'
+      - 'styles.css'
+      - 'scripts/build.mjs'
+      - 'scripts/capture-demo.mjs'
+      - '.github/workflows/demo-video.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --ignore-scripts --no-audit
+      - run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Record source-driven demo
+        run: node scripts/capture-demo.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anki-demo-video
+          path: demo-output/anki-demo.webm
+          if-no-files-found: error
+          retention-days: 30

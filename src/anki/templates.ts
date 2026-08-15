@@ -212,6 +212,7 @@ function makeCard(note: StudyNote, noteType: NoteTypeDefinition, deck: DeckDefin
   return {
     ...base,
     id: existing?.id ?? uid('card'),
+    cardNumber: fieldValue(note, '__CardNumber').trim() || existing?.cardNumber || base.cardNumber,
     profileId: note.profileId,
     deckId: template.deckOverrideId || note.deckId,
     noteId: note.id,

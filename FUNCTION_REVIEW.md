@@ -33,6 +33,7 @@ The existing acceptance suite additionally verifies `.apkg` round-trip import/ex
 - Interrupted study sessions were persisted but startup only displayed a notice; the app now automatically resumes the stored review session.
 - Browser acceptance previously used a short fixed delay for a major screen transition; it now waits for the observable Browser UI state to avoid WebKit timing flakes.
 - One-shot patch workflows used during review were removed after their changes were applied.
+- GitHub Dependency Review is attempted on pull requests. This repository currently has Dependency Graph disabled, so the workflow also performs a mandatory `npm audit --audit-level=high` fallback. Enabling Dependency Graph in repository Security settings will activate the native GitHub dependency comparison as well.
 
 ## Non-browser/external boundaries
 

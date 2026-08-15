@@ -114,7 +114,7 @@ export class App {
 
   private async navigate(route: Route): Promise<void> {
     this.route = route;
-    if (route !== 'home') this.selectedDeckId = null;
+    this.selectedDeckId = null;
     document.querySelectorAll<HTMLButtonElement>('[data-route]').forEach((item) => item.classList.toggle('is-active', item.dataset.route === route));
     await this.render();
     this.view.focus({ preventScroll: true });

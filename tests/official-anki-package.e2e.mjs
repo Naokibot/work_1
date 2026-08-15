@@ -33,7 +33,12 @@ try {
   page.on('pageerror', (error) => runtimeErrors.push(String(error)));
   await page.goto(url, { waitUntil: 'networkidle' });
   await page.locator('#import-file').setInputFiles(fixture);
-  await page.waitForFunction(() => document.getElementById('status-message')?.textContent?.includes('Ankiパッケージを読み込みました'), null, { timeout: 30000 });
+  await page.waitForFunction(() => {
+    const text = document.getElementById('status-message')?.textContent ?? '';
+    return Boolean(text) && !text.includes('解析しています');
+  }, null, { timeout: 30000 });
+  const importStatus = await page.locator('#status-message').textContent();
+  assert.ok(importStatus?.includes('Ankiパッケージを読み込みました'), `official package import status: ${importStatus}; pageErrors=${runtimeErrors.join(' | ')}`);
   await page.waitForTimeout(1000);
   await page.waitForLoadState('networkidle');
 

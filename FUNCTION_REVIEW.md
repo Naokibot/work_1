@@ -2,7 +2,7 @@
 
 Date: 2026-08-15
 
-This review is a release gate for the Study Cards PWA. A feature is only called browser-verified when the automated acceptance flow performs the corresponding UI/data operation in Chromium and WebKit.
+This review is a release gate for the Study Cards PWA. A feature is only called browser-verified when the automated acceptance flow performs the corresponding UI/data operation in Chromium and WebKit. Browser tests wait for observable UI state rather than relying on fixed short sleeps for major screen transitions.
 
 ## Browser acceptance scope
 

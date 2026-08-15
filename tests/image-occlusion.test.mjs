@@ -33,7 +33,7 @@ test('serializes native occlusion syntax and Hide All inactive masks', () => {
     { id: 'a', shape: 'rect', x: 10, y: 20, width: 30, height: 10, answer: '' },
     { id: 'b', shape: 'ellipse', x: 50, y: 20, width: 20, height: 20, answer: '' }
   ];
-  assert.match(serializeImageOcclusionShape(masks[0]), /^rect:left=\.1:top=\.2:width=\.3:height=\.1$/);
+  assert.match(serializeImageOcclusionShape(masks[0]), /^rect:left=0\.1:top=0\.2:width=0\.3:height=0\.1$/);
   const value = serializeNativeOcclusions(masks, 'hide-all-guess-one');
   assert.match(value, /\{\{c1::image-occlusion:rect:/);
   assert.match(value, /\{\{c0::image-occlusion:ellipse:.*oi=1/);

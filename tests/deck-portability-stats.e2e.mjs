@@ -37,24 +37,24 @@ async function run(name, engine) {
     const context=await browser.newContext({viewport:{width:1024,height:768},acceptDownloads:true,serviceWorkers:'allow'});
     const page=await context.newPage(); await page.goto(url,{waitUntil:'networkidle'}); await page.waitForSelector('.main-toolbar');
 
-    await page.getByRole('button',{name:'追加',exact:true}).click();
+    await page.locator('#add-card-button').click();
     const optionLabels=await page.locator('#note-type option').allTextContents();
     for(const expected of ['基本','基本（表裏2枚）','基本（任意で表裏2枚）','基本（解答入力）','穴埋め','画像穴埋め']) assert.ok(optionLabels.includes(expected),`${name}: Japanese note type ${expected}`);
     assert.ok(await page.getByLabel('表面').isVisible(),`${name}: Front field localized`);
     assert.ok(await page.getByLabel('裏面').isVisible(),`${name}: Back field localized`);
-    await page.getByRole('button',{name:'閉じる',exact:true}).click();
+    await page.locator('#card-close').click();
 
     page.once('dialog',(dialog)=>dialog.accept('書き出しテスト'));
     await page.getByRole('button',{name:'デッキを作成',exact:true}).click();
     await page.waitForFunction(()=>document.getElementById('view')?.textContent?.includes('書き出しテスト'));
 
-    await page.getByRole('button',{name:'追加',exact:true}).click();
+    await page.locator('#add-card-button').click();
     await page.locator('#note-deck').selectOption({label:'書き出しテスト'});
     await page.getByLabel('表面').fill('書き出し問題');
     await page.getByLabel('裏面').fill('書き出し答え');
     await page.locator('#card-save').click();
     await page.waitForFunction(()=>document.getElementById('status-message')?.textContent?.includes('カードを追加'));
-    await page.getByRole('button',{name:'閉じる',exact:true}).click();
+    await page.locator('#card-close').click();
 
     const cardId=await page.evaluate(async()=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('work_1_study_cards');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});const tx=db.transaction('cards','readonly');const cards=await new Promise((resolve,reject)=>{const r=tx.objectStore('cards').getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});return cards.find((card)=>card.question.includes('書き出し問題'))?.id;});
     assert.ok(cardId,`${name}: card created`); await addHistory(page,cardId);

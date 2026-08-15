@@ -161,8 +161,8 @@ function countStats(history:ReviewHistory[],cardId:string):StudyCard['stats']{co
 
 export async function importAnkiPackage(file:File):Promise<AnkiPackageImportResult>{
   if(file.size>500*1024*1024)throw new Error('Ankiパッケージが500MBを超えています。');
-  const zip=fflate.unzipSync(new Uint8Array(await file.arrayBuffer())),latest=Boolean(zip['collection.21b']);
-  const collectionBytes=latest?fzstd.decompress(zip['collection.21b'] as Uint8Array):(zip['collection.anki21']??zip['collection.anki2']);if(!collectionBytes)throw new Error('Ankiコレクションがパッケージ内に見つかりません。');
+  const zip=fflate.unzipSync(new Uint8Array(await file.arrayBuffer())),latest=Boolean(zip['collection.anki21b']);
+  const collectionBytes=latest?fzstd.decompress(zip['collection.anki21b'] as Uint8Array):(zip['collection.anki21']??zip['collection.anki2']);if(!collectionBytes)throw new Error('Ankiコレクションがパッケージ内に見つかりません。');
   const media=latest?decodeLatestMedia(zip):decodeLegacyMedia(zip),SQL=await sqlRuntime(),db=new SQL.Database(collectionBytes);
   try{
     if(!tableExists(db,'notes')||!tableExists(db,'cards'))throw new Error('有効なAnkiコレクションではありません。');

@@ -23,14 +23,14 @@ const url=`http://127.0.0.1:${address.port}/`;
 async function idb(page, expression, arg) {
   return page.evaluate(async ({ expression, arg }) => {
     const db = await new Promise((resolve,reject)=>{ const r=indexedDB.open('work_1_study_cards'); r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error); });
-    const tx=db.transaction(['cards','history','snapshots','session','settings','syncQueue','ankiState'],'readonly');
+    const tx=db.transaction(['cards','history','snapshots','sessions','settings','queue','anki'],'readonly');
     const getAll=(name)=>new Promise((resolve,reject)=>{const r=tx.objectStore(name).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
     const getOne=(name,key)=>new Promise((resolve,reject)=>{const r=tx.objectStore(name).get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
     if(expression==='count') return (await getAll(arg)).length;
     if(expression==='cards') return await getAll('cards');
     if(expression==='history') return await getAll('history');
     if(expression==='snapshots') return await getAll('snapshots');
-    if(expression==='session') return await getOne('session','current');
+    if(expression==='session') return await getOne('sessions','current');
     return null;
   }, { expression, arg });
 }

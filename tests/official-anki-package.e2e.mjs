@@ -36,11 +36,25 @@ try {
   await page.waitForFunction(() => document.getElementById('status-message')?.textContent?.includes('Ankiパッケージを読み込みました'), null, { timeout: 30000 });
   await page.waitForTimeout(1000);
   await page.waitForLoadState('networkidle');
+
+  const snapshot = await page.evaluate(async () => {
+    const storage = await import('./assets/storage/db.js');
+    const [cards, state] = await Promise.all([storage.getCards(), storage.getAnkiState()]);
+    return {
+      cards: cards.map((card) => ({ id: card.id, question: card.question, answer: card.answer, deckId: card.deckId, noteId: card.noteId })),
+      decks: state.decks.map((deck) => ({ id: deck.id, name: deck.name })),
+      notes: state.notes.map((note) => ({ id: note.id, fields: note.fields, deckId: note.deckId, noteTypeId: note.noteTypeId }))
+    };
+  });
+  const importedCard = snapshot.cards.find((card) => card.question.includes('Official Anki 26.5 fixture'));
+  assert.ok(importedCard, `official Anki card imported; snapshot=${JSON.stringify(snapshot)}`);
+  assert.ok(snapshot.decks.some((deck) => deck.name === 'Interop::Official 26.5'), `official Anki deck imported; decks=${JSON.stringify(snapshot.decks)}`);
+  assert.ok(snapshot.notes.some((note) => Object.values(note.fields).some((value) => String(value).includes('Official Anki 26.5 fixture'))), 'official Anki note fields preserved');
+
   await page.locator('[data-route="anki"]').click();
   await page.waitForTimeout(300);
   const content = await page.locator('#view').innerText();
-  assert.ok(content.includes('Official Anki 26.5 fixture'), 'official Anki note imported');
-  assert.ok(content.includes('Interop::Official 26.5'), 'official Anki deck imported');
+  assert.ok(content.includes('Official Anki 26.5 fixture'), 'official imported card appears in browser UI');
   assert.equal(runtimeErrors.length, 0, `no browser runtime errors: ${runtimeErrors.join('\n')}`);
   process.stdout.write('official-anki-interop: Anki 26.5 latest collection package imported\n');
 } finally {

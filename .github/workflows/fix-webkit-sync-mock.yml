@@ -1,0 +1,36 @@
+name: Fix WebKit Sync Mock
+
+on:
+  push:
+    branches: [review-full-function-20260815]
+    paths:
+      - .github/workflows/fix-webkit-sync-mock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: review-full-function-20260815
+      - name: Replace network interception with in-page GAS transport mock
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/full-function.e2e.mjs')
+          s=p.read_text()
+          start=s.index("    await page.route('https://script.google.com/**'")
+          end=s.index("    await page.evaluate(async()=>{const db=await import('./assets/storage/db.js');", start)
+          replacement="""    await page.evaluate(() => {\n      const nativeFetch = window.fetch.bind(window);\n      window.fetch = async (input, init) => {\n        const target = typeof input === 'string' ? input : input.url;\n        if (target.startsWith('https://script.google.com/macros/s/')) return new Response('', { status: 200 });\n        return nativeFetch(input, init);\n      };\n      const nativeAppend = Element.prototype.appendChild;\n      Element.prototype.appendChild = function(node) {\n        if (this === document.head && node instanceof HTMLScriptElement && node.src.startsWith('https://script.google.com/macros/s/')) {\n          const callback = new URL(node.src).searchParams.get('callback');\n          setTimeout(() => {\n            if (callback && typeof window[callback] === 'function') {\n              window[callback]({ ok:true, serverTime:new Date().toISOString(), cards:[], history:[], syncResults:[] });\n            }\n          }, 0);\n          return node;\n        }\n        return nativeAppend.call(this, node);\n      };\n    });\n"""
+          p.write_text(s[:start]+replacement+s[end:])
+          PY
+      - name: Commit
+        run: |
+          git config user.name "Hotaru(Naokibot)"
+          git config user.email "sagakatsuyuki.555@gmail.com"
+          git add tests/full-function.e2e.mjs
+          git commit -m "make GAS sync mock engine independent"
+          git push origin HEAD:review-full-function-20260815

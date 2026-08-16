@@ -76,7 +76,9 @@ async function run(name, engine) {
     await page.getByRole('button', { name: '今すぐ学習', exact: true }).click();
     await page.waitForSelector('#review-screen:not([hidden])');
     assert.equal(await page.locator('#review-screen').evaluate((node) => node.classList.contains('enhanced-spell-session')), false, `${name}: normal study clears transient Spell mode`);
-    await page.locator('#review-close').click();
+    await page.locator('#show-answer').click();
+    await page.locator('#rating-row [data-rating="good"]').click();
+    await page.waitForSelector('#review-screen[hidden]');
 
     await page.reload({ waitUntil: 'networkidle' });
     await openFirstDeck(page);

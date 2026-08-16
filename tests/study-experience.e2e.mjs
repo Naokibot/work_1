@@ -28,6 +28,10 @@ async function openFirstDeck(page) {
   await page.waitForSelector('.enhanced-study-section');
 }
 
+function shortcut(page, label) {
+  return page.locator('.enhanced-study-grid .enhanced-study-button').filter({ has: page.locator('strong', { hasText: label }) }).first();
+}
+
 async function run(name, engine) {
   const browser = await engine.launch({ headless: true });
   try {
@@ -55,13 +59,13 @@ async function run(name, engine) {
     await page.waitForFunction(() => document.querySelector('.enhanced-plan-result')?.textContent?.includes('試験まで'));
     assert.match(await page.locator('.enhanced-plan-result').innerText(), /試験まで/, `${name}: exam planner renders a countdown`);
 
-    await page.getByRole('button', { name: /筆記答えを入力して確認/ }).click();
+    await shortcut(page, '筆記').click();
     await page.waitForSelector('#study-dialog[open]');
     assert.equal(await page.locator('#study-mode').inputValue(), 'deck', `${name}: Write uses due+new learning course`);
     assert.equal(await page.locator('#study-style').inputValue(), 'type', `${name}: Write selects typed answers`);
     await page.locator('#study-cancel').click();
 
-    await page.getByRole('button', { name: /スペル音声を聞いて入力/ }).click();
+    await shortcut(page, 'スペル').click();
     await page.waitForSelector('#study-dialog[open]');
     assert.equal(await page.locator('#study-style').inputValue(), 'spell', `${name}: Spell selects speech-assisted typing`);
     await page.locator('#study-form button[type="submit"]').click();

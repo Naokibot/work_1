@@ -14,7 +14,7 @@
     "e2e": "npm run build && node tests/browser.e2e.mjs && node tests/full-function.e2e.mjs && node tests/persistence.e2e.mjs && node tests/deck-portability-stats.e2e.mjs && node tests/card-number-deck-review.e2e.mjs && node tests/study-experience.e2e.mjs"
   },
   "devDependencies": {
-    "typescript": "5.8.3",
+    "typescript": "7.0.2",
     "playwright": "1.62.1"
   },
   "engines": {

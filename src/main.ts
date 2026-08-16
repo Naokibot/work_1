@@ -2,6 +2,8 @@ import { App } from './app/app.js';
 import { installCardNumberField } from './app/card-number.js';
 import { installAnkiPackageHooks } from './anki/package-hooks.js';
 import { installImageOcclusionEditor } from './anki/image-occlusion-editor.js';
+import './study/enhancements.js';
+import './study/session-guard.js';
 
 function prepareDialogs():void{
   for(const dialog of document.querySelectorAll<HTMLDialogElement>('dialog')){

@@ -37,7 +37,7 @@ function request<T>(value: IDBRequest<T>): Promise<T> {
   });
 }
 
-async function studyDataForDeck(deckId: string): Promise<{ cards: CardLite[]; history: PlannerHistory[]; deckName: string }> {
+async function studyDataForDeck(deckId: string): Promise<{ cards: CardLite[]; history: PlannerHistory[] }> {
   const db = await openDatabase();
   try {
     const tx = db.transaction(['cards', 'history', 'anki'], 'readonly');
@@ -57,7 +57,7 @@ async function studyDataForDeck(deckId: string): Promise<{ cards: CardLite[]; hi
     const activeProfile = state?.activeProfileId;
     const scopedCards = cards.filter((card) => deckIds.has(card.deckId ?? '') && (!activeProfile || (card.profileId ?? 'profile_default') === activeProfile));
     const cardIds = new Set(scopedCards.map((card) => card.id));
-    return { cards: scopedCards, history: history.filter((item) => cardIds.has(item.cardId)), deckName: selectedName };
+    return { cards: scopedCards, history: history.filter((item) => cardIds.has(item.cardId)) };
   } finally {
     db.close();
   }
@@ -79,7 +79,9 @@ function loadPlans(): ExamPlans {
     const parsed = JSON.parse(localStorage.getItem(PLAN_KEY) ?? '{}') as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     const result: ExamPlans = {};
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) if (typeof value === 'string') result[key] = value;
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === 'string') result[key] = value;
+    }
     return result;
   } catch {
     return {};
@@ -100,6 +102,16 @@ function localDateInput(date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
+function headingBlock(title: string, subtitle: string): HTMLDivElement {
+  const wrapper = document.createElement('div');
+  const strong = document.createElement('strong');
+  strong.textContent = title;
+  const small = document.createElement('small');
+  small.textContent = subtitle;
+  wrapper.append(strong, small);
+  return wrapper;
+}
+
 function ensureStudyOptions(): void {
   const mode = byId<HTMLSelectElement>('study-mode');
   const style = byId<HTMLSelectElement>('study-style');
@@ -114,7 +126,7 @@ function ensureStudyOptions(): void {
   if (size && !byId<HTMLInputElement>('study-exam-date')) {
     const label = document.createElement('label');
     label.className = 'enhanced-exam-date';
-    label.textContent = '試験日（任意）';
+    label.append(document.createTextNode('試験日（任意）'));
     const input = document.createElement('input');
     input.id = 'study-exam-date';
     input.type = 'date';
@@ -128,7 +140,8 @@ function ensureStudyOptions(): void {
     const deckSelect = byId<HTMLSelectElement>('study-deck');
     const examDate = byId<HTMLInputElement>('study-exam-date');
     const spell = styleSelect?.value === 'spell';
-    sessionStorage.setItem(SPEECH_MODE_KEY, spell ? 'spell' : '');
+    if (spell) sessionStorage.setItem(SPEECH_MODE_KEY, 'spell');
+    else sessionStorage.removeItem(SPEECH_MODE_KEY);
     if (spell && styleSelect) styleSelect.value = 'type';
     if (deckSelect?.value && examDate?.value) savePlan(deckSelect.value, examDate.value);
   }, true);
@@ -151,7 +164,9 @@ function configureStudy(presetName: StudyPresetName, deckId: string, examDate = 
     if (style) style.value = preset.speech ? 'spell' : preset.style;
     if (deck) deck.value = deckId;
     if (size) {
-      if (![...size.options].some((option) => Number(option.value) === preset.size)) size.append(new Option(String(preset.size), String(preset.size)));
+      if (![...size.options].some((option) => Number(option.value) === preset.size)) {
+        size.append(new Option(String(preset.size), String(preset.size)));
+      }
       size.value = String(preset.size);
     }
     if (date) date.value = examDate;
@@ -196,7 +211,11 @@ async function renderExamPlan(panel: HTMLElement, deckId: string, examDate: stri
     ];
     for (const [value, label] of values) {
       const item = document.createElement('span');
-      item.innerHTML = `<strong>${value}</strong><small>${label}</small>`;
+      const strong = document.createElement('strong');
+      strong.textContent = value;
+      const small = document.createElement('small');
+      small.textContent = label;
+      item.append(strong, small);
       summary.append(item);
     }
     const progress = document.createElement('div');
@@ -216,11 +235,18 @@ async function renderExamPlan(panel: HTMLElement, deckId: string, examDate: stri
 
 async function enhanceDeckOverview(): Promise<void> {
   const overview = document.querySelector<HTMLElement>('.deck-overview');
-  if (!overview || overview.dataset.studyExperienceReady === '1') return;
+  if (!overview || overview.dataset.studyExperienceReady) return;
+  overview.dataset.studyExperienceReady = 'pending';
   const heading = overview.querySelector('h2')?.textContent?.trim();
-  if (!heading) return;
+  if (!heading) {
+    delete overview.dataset.studyExperienceReady;
+    return;
+  }
   const deckId = await findDeckByVisibleName(heading).catch(() => null);
-  if (!deckId || !overview.isConnected) return;
+  if (!deckId || !overview.isConnected) {
+    delete overview.dataset.studyExperienceReady;
+    return;
+  }
   overview.dataset.studyExperienceReady = '1';
 
   const savedDate = loadPlans()[deckId] ?? '';
@@ -228,7 +254,7 @@ async function enhanceDeckOverview(): Promise<void> {
   section.className = 'enhanced-study-section';
   const title = document.createElement('div');
   title.className = 'enhanced-study-heading';
-  title.innerHTML = '<div><strong>学習モード</strong><small>目的に合わせて1タップで開始</small></div>';
+  title.append(headingBlock('学習モード', '目的に合わせて1タップで開始'));
   const buttons = document.createElement('div');
   buttons.className = 'enhanced-study-grid';
   buttons.append(
@@ -244,8 +270,7 @@ async function enhanceDeckOverview(): Promise<void> {
   planPanel.className = 'enhanced-plan-panel';
   const planHeader = document.createElement('div');
   planHeader.className = 'enhanced-plan-header';
-  const planTitle = document.createElement('div');
-  planTitle.innerHTML = '<strong>試験プラン</strong><small>試験日から今日の学習量を逆算</small>';
+  const planTitle = headingBlock('試験プラン', '試験日から今日の学習量を逆算');
   const dateWrap = document.createElement('div');
   dateWrap.className = 'enhanced-plan-date';
   const input = document.createElement('input');
@@ -287,6 +312,7 @@ function speak(text: string): void {
 }
 
 let lastSpokenKey = '';
+
 function applySpeechMode(): void {
   const screen = byId<HTMLElement>('review-screen');
   const answer = byId<HTMLElement>('review-answer');
@@ -325,7 +351,9 @@ function applySpeechMode(): void {
   const key = `${progress}\n${text}`;
   if (text && key !== lastSpokenKey) {
     lastSpokenKey = key;
-    window.setTimeout(() => speak(text), 80);
+    window.setTimeout(() => {
+      if (sessionStorage.getItem(SPEECH_MODE_KEY) === 'spell' && !screen.hidden) speak(text);
+    }, 80);
   }
 }
 
@@ -361,6 +389,7 @@ function installStyles(): void {
 }
 
 let enhancementQueued = false;
+
 function queueEnhancement(): void {
   if (enhancementQueued) return;
   enhancementQueued = true;

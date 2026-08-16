@@ -32,6 +32,10 @@ function shortcut(page, label) {
   return page.locator('.enhanced-study-grid .enhanced-study-button').filter({ has: page.locator('strong', { hasText: label }) }).first();
 }
 
+async function waitForReviewHidden(page) {
+  await page.waitForFunction(() => document.getElementById('review-screen')?.hasAttribute('hidden') === true);
+}
+
 async function run(name, engine) {
   const browser = await engine.launch({ headless: true });
   try {
@@ -76,13 +80,13 @@ async function run(name, engine) {
     assert.match(await page.locator('#enhanced-spell-prompt').innerText(), /音声を聞いて入力/, `${name}: Spell shows audio instruction`);
 
     await page.locator('#review-close').click();
-    await page.waitForSelector('#review-screen[hidden]');
+    await waitForReviewHidden(page);
     await page.getByRole('button', { name: '今すぐ学習', exact: true }).click();
     await page.waitForSelector('#review-screen:not([hidden])');
     assert.equal(await page.locator('#review-screen').evaluate((node) => node.classList.contains('enhanced-spell-session')), false, `${name}: normal study clears transient Spell mode`);
     await page.locator('#show-answer').click();
     await page.locator('#rating-row [data-rating="good"]').click();
-    await page.waitForSelector('#review-screen[hidden]');
+    await waitForReviewHidden(page);
 
     await page.reload({ waitUntil: 'networkidle' });
     await openFirstDeck(page);

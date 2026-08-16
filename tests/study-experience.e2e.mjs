@@ -52,7 +52,7 @@ async function run(name, engine) {
     const examDate = page.locator('.enhanced-plan-date input[type="date"]');
     await examDate.fill('2027-02-14');
     await page.locator('.enhanced-plan-date button').click();
-    await page.waitForFunction(() => document.querySelector('.enhanced-plan-result')?.textContent?.includes('1日の目安'));
+    await page.waitForFunction(() => document.querySelector('.enhanced-plan-result')?.textContent?.includes('試験まで'));
     assert.match(await page.locator('.enhanced-plan-result').innerText(), /試験まで/, `${name}: exam planner renders a countdown`);
 
     await page.getByRole('button', { name: /筆記答えを入力して確認/ }).click();

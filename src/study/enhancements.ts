@@ -1,77 +1,29 @@
+import { cardsInDeck } from '../anki/collection.js';
+import { getAnkiState, getCards, getHistory } from '../storage/db.js';
 import { computeExamPlan, studyPreset, type PlannerCard, type PlannerHistory, type StudyPresetName } from './learning-tools.js';
 
-const DB_NAME = 'work_1_study_cards';
-const DB_VERSION = 2;
 const PLAN_KEY = 'work1.examPlans.v1';
-const SPEECH_MODE_KEY = 'work1.studySpeechMode';
 const SPEECH_RATE_KEY = 'work1.studySpeechRate';
 
 type ExamPlans = Record<string, string>;
-
-interface AnkiStateLite {
-  activeProfileId: string;
-  decks: Array<{ id: string; profileId: string; name: string }>;
-}
-
-interface CardLite extends PlannerCard {
-  profileId?: string;
-}
 
 function byId<T extends HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
 }
 
-function openDatabase(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('IndexedDBを開けませんでした。'));
-    request.onblocked = () => reject(new Error('別タブがデータベースを使用中です。'));
-  });
-}
-
-function request<T>(value: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    value.onsuccess = () => resolve(value.result);
-    value.onerror = () => reject(value.error ?? new Error('IndexedDBの読み込みに失敗しました。'));
-  });
-}
-
-async function studyDataForDeck(deckId: string): Promise<{ cards: CardLite[]; history: PlannerHistory[] }> {
-  const db = await openDatabase();
-  try {
-    const tx = db.transaction(['cards', 'history', 'anki'], 'readonly');
-    const [cards, history, state] = await Promise.all([
-      request(tx.objectStore('cards').getAll()) as Promise<CardLite[]>,
-      request(tx.objectStore('history').getAll()) as Promise<PlannerHistory[]>,
-      request(tx.objectStore('anki').get('anki')) as Promise<AnkiStateLite | undefined>
-    ]);
-    const selected = state?.decks.find((deck) => deck.id === deckId);
-    const selectedName = selected?.name ?? '';
-    const deckIds = new Set(
-      (state?.decks ?? [])
-        .filter((deck) => deck.id === deckId || (selectedName && deck.name.startsWith(`${selectedName}::`)))
-        .map((deck) => deck.id)
-    );
-    if (!deckIds.size) deckIds.add(deckId);
-    const activeProfile = state?.activeProfileId;
-    const scopedCards = cards.filter((card) => deckIds.has(card.deckId ?? '') && (!activeProfile || (card.profileId ?? 'profile_default') === activeProfile));
-    const cardIds = new Set(scopedCards.map((card) => card.id));
-    return { cards: scopedCards, history: history.filter((item) => cardIds.has(item.cardId)) };
-  } finally {
-    db.close();
-  }
+async function studyDataForDeck(deckId: string): Promise<{ cards: PlannerCard[]; history: PlannerHistory[] }> {
+  const [cards, history, state] = await Promise.all([getCards(), getHistory(), getAnkiState()]);
+  const scopedCards = cardsInDeck(cards, state, deckId, true);
+  const cardIds = new Set(scopedCards.map((card) => card.id));
+  return {
+    cards: scopedCards,
+    history: history.filter((item) => cardIds.has(item.cardId))
+  };
 }
 
 async function findDeckByVisibleName(name: string): Promise<string | null> {
-  const db = await openDatabase();
-  try {
-    const tx = db.transaction('anki', 'readonly');
-    const state = await request(tx.objectStore('anki').get('anki')) as AnkiStateLite | undefined;
-    return state?.decks.find((deck) => deck.profileId === state.activeProfileId && deck.name === name)?.id ?? null;
-  } finally {
-    db.close();
-  }
+  const state = await getAnkiState();
+  return state.decks.find((deck) => deck.profileId === state.activeProfileId && deck.name === name)?.id ?? null;
 }
 
 function loadPlans(): ExamPlans {
@@ -135,19 +87,21 @@ function ensureStudyOptions(): void {
     size.closest('label')?.after(label);
   }
 
+  const deckSelect = byId<HTMLSelectElement>('study-deck');
+  deckSelect?.addEventListener('change', () => {
+    const date = byId<HTMLInputElement>('study-exam-date');
+    if (date) date.value = loadPlans()[deckSelect.value] ?? '';
+  });
+
   form.addEventListener('submit', () => {
-    const styleSelect = byId<HTMLSelectElement>('study-style');
-    const deckSelect = byId<HTMLSelectElement>('study-deck');
+    const deck = byId<HTMLSelectElement>('study-deck');
     const examDate = byId<HTMLInputElement>('study-exam-date');
-    const spell = styleSelect?.value === 'spell';
-    if (spell) sessionStorage.setItem(SPEECH_MODE_KEY, 'spell');
-    else sessionStorage.removeItem(SPEECH_MODE_KEY);
-    if (spell && styleSelect) styleSelect.value = 'type';
-    if (deckSelect?.value && examDate?.value) savePlan(deckSelect.value, examDate.value);
+    if (!deck?.value || !examDate) return;
+    if (examDate.value) savePlan(deck.value, examDate.value);
   }, true);
 }
 
-function configureStudy(presetName: StudyPresetName, deckId: string, examDate = ''): void {
+function configureStudy(presetName: StudyPresetName, deckId: string): void {
   const custom = [...document.querySelectorAll<HTMLButtonElement>('.overview-actions button')]
     .find((button) => button.textContent?.includes('カスタム学習'));
   if (!custom) return;
@@ -161,7 +115,7 @@ function configureStudy(presetName: StudyPresetName, deckId: string, examDate = 
     const size = byId<HTMLSelectElement>('study-size');
     const date = byId<HTMLInputElement>('study-exam-date');
     if (mode) mode.value = preset.mode;
-    if (style) style.value = preset.speech ? 'spell' : preset.style;
+    if (style) style.value = preset.style;
     if (deck) deck.value = deckId;
     if (size) {
       if (![...size.options].some((option) => Number(option.value) === preset.size)) {
@@ -169,11 +123,11 @@ function configureStudy(presetName: StudyPresetName, deckId: string, examDate = 
       }
       size.value = String(preset.size);
     }
-    if (date) date.value = examDate;
+    if (date) date.value = loadPlans()[deckId] ?? '';
   }, 0);
 }
 
-function presetButton(label: string, description: string, name: StudyPresetName, deckId: string, examDate: string): HTMLButtonElement {
+function presetButton(label: string, description: string, name: StudyPresetName, deckId: string): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'enhanced-study-button';
@@ -182,7 +136,7 @@ function presetButton(label: string, description: string, name: StudyPresetName,
   const small = document.createElement('small');
   small.textContent = description;
   button.append(strong, small);
-  button.addEventListener('click', () => configureStudy(name, deckId, examDate));
+  button.addEventListener('click', () => configureStudy(name, deckId));
   return button;
 }
 
@@ -249,7 +203,6 @@ async function enhanceDeckOverview(): Promise<void> {
   }
   overview.dataset.studyExperienceReady = '1';
 
-  const savedDate = loadPlans()[deckId] ?? '';
   const section = document.createElement('section');
   section.className = 'enhanced-study-section';
   const title = document.createElement('div');
@@ -258,11 +211,11 @@ async function enhanceDeckOverview(): Promise<void> {
   const buttons = document.createElement('div');
   buttons.className = 'enhanced-study-grid';
   buttons.append(
-    presetButton('Learn', '復習＋新規を順に', 'learn', deckId, savedDate),
-    presetButton('テスト', 'ランダム選択問題', 'test', deckId, savedDate),
-    presetButton('筆記', '答えを入力して確認', 'write', deckId, savedDate),
-    presetButton('スペル', '音声を聞いて入力', 'spell', deckId, savedDate),
-    presetButton('間違い', '直近のミスだけ', 'wrong', deckId, savedDate)
+    presetButton('Learn', '復習＋新規を順に', 'learn', deckId),
+    presetButton('テスト', 'FSRSを変えない模擬テスト', 'test', deckId),
+    presetButton('筆記', '答えを入力して確認', 'write', deckId),
+    presetButton('スペル', '音声を聞いて入力', 'spell', deckId),
+    presetButton('間違い', '直近のミスだけ', 'wrong', deckId)
   );
   section.append(title, buttons);
 
@@ -276,7 +229,7 @@ async function enhanceDeckOverview(): Promise<void> {
   const input = document.createElement('input');
   input.type = 'date';
   input.min = localDateInput();
-  input.value = savedDate;
+  input.value = loadPlans()[deckId] ?? '';
   input.setAttribute('aria-label', '試験日');
   const save = document.createElement('button');
   save.type = 'button';
@@ -294,7 +247,7 @@ async function enhanceDeckOverview(): Promise<void> {
   const actions = overview.querySelector('.overview-actions');
   if (actions) actions.before(section, planPanel);
   else overview.append(section, planPanel);
-  await renderExamPlan(planPanel, deckId, savedDate);
+  await renderExamPlan(planPanel, deckId, input.value);
 }
 
 function speechRate(): number {
@@ -313,12 +266,16 @@ function speak(text: string): void {
 
 let lastSpokenKey = '';
 
+function spellActive(screen: HTMLElement): boolean {
+  return screen.dataset.reviewStyle === 'spell' && !screen.hidden;
+}
+
 function applySpeechMode(): void {
   const screen = byId<HTMLElement>('review-screen');
   const answer = byId<HTMLElement>('review-answer');
   const question = byId<HTMLElement>('review-question');
   if (!screen || !answer || !question) return;
-  const active = sessionStorage.getItem(SPEECH_MODE_KEY) === 'spell' && !screen.hidden;
+  const active = spellActive(screen);
   screen.classList.toggle('enhanced-spell-session', active);
   let prompt = byId<HTMLElement>('enhanced-spell-prompt');
   if (active && !prompt) {
@@ -352,7 +309,7 @@ function applySpeechMode(): void {
   if (text && key !== lastSpokenKey) {
     lastSpokenKey = key;
     window.setTimeout(() => {
-      if (sessionStorage.getItem(SPEECH_MODE_KEY) === 'spell' && !screen.hidden) speak(text);
+      if (spellActive(screen)) speak(text);
     }, 80);
   }
 }
@@ -363,7 +320,7 @@ function installReplaySpeech(): void {
   replay.dataset.enhancedSpeechReady = '1';
   replay.addEventListener('click', (event) => {
     const screen = byId<HTMLElement>('review-screen');
-    if (sessionStorage.getItem(SPEECH_MODE_KEY) !== 'spell' || screen?.hidden) return;
+    if (!screen || !spellActive(screen)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     speak(byId<HTMLElement>('review-answer')?.textContent?.trim() ?? '');
@@ -410,7 +367,7 @@ function boot(): void {
   const view = byId<HTMLElement>('view');
   const review = byId<HTMLElement>('review-screen');
   if (view) new MutationObserver(queueEnhancement).observe(view, { childList: true, subtree: true });
-  if (review) new MutationObserver(queueEnhancement).observe(review, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+  if (review) new MutationObserver(queueEnhancement).observe(review, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'data-review-style'] });
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });

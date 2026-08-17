@@ -79,6 +79,17 @@ async function cardSnapshot(page, id) {
   }, id);
 }
 
+async function finishSelfReview(page) {
+  for (let guard = 0; guard < 20; guard += 1) {
+    const hidden = await page.locator('#review-screen').evaluate((node) => node.hasAttribute('hidden'));
+    if (hidden) return;
+    if (await page.locator('#show-answer').isVisible()) await page.locator('#show-answer').click();
+    if (await page.locator('#rating-row [data-rating="good"]').isVisible()) await page.locator('#rating-row [data-rating="good"]').click();
+    await page.waitForTimeout(60);
+  }
+  throw new Error('normal review did not complete');
+}
+
 async function run(name, engine) {
   const browser = await engine.launch({ headless: true });
   try {
@@ -162,10 +173,7 @@ async function run(name, engine) {
     await page.getByRole('button', { name: '今すぐ学習', exact: true }).click();
     await page.waitForSelector('#review-screen:not([hidden])');
     assert.equal(await page.locator('#review-screen').evaluate((node) => node.classList.contains('enhanced-spell-session')), false, `${name}: normal study does not inherit Spell mode`);
-    await page.locator('#show-answer').click();
-    await page.locator('#rating-row [data-rating="good"]').click();
-    await page.waitForTimeout(80);
-    await page.locator('#review-close').click();
+    await finishSelfReview(page);
     await waitForReviewHidden(page);
 
     await page.reload({ waitUntil: 'networkidle' });

@@ -9,17 +9,150 @@ import { deviceLabel, nowIso, shuffle, uid } from '../utils/core.js';
 interface ReviewElements {screen:HTMLElement;close:HTMLButtonElement;progress:HTMLElement;timer:HTMLElement;favorite:HTMLButtonElement;flag:HTMLButtonElement;bury:HTMLButtonElement;suspend:HTMLButtonElement;replay:HTMLButtonElement;number:HTMLElement;question:HTMLElement;tags:HTMLElement;showAnswer:HTMLButtonElement;answerPanel:HTMLElement;answer:HTMLElement;explanation:HTMLElement;choiceList:HTMLElement;typeArea:HTMLElement;typeInput:HTMLInputElement;typeCheck:HTMLButtonElement;typeResult:HTMLElement;io:HTMLElement;ratingRow:HTMLElement;canvas:HTMLCanvasElement;pen:HTMLButtonElement;eraser:HTMLButtonElement;undo:HTMLButtonElement;redo:HTMLButtonElement;clear:HTMLButtonElement;card:HTMLElement}
 function byId<T extends HTMLElement>(id:string):T{const e=document.getElementById(id);if(!e)throw new Error(`Missing #${id}`);return e as T}
 function normalizeAnswer(value:string):string{return plainText(value).normalize('NFKC').trim().replace(/\s+/gu,' ').toLocaleLowerCase();}
+
 export class ReviewController{
- private readonly elements:ReviewElements;private readonly pad:ScratchPad;private session:ReviewSession|null=null;private currentCard:StudyCard|null=null;private state:AnkiState|null=null;private preferences:AppSettings|null=null;private questionStartedAt=0;private responseMs=0;private answeredCorrectly=true;private timerHandle=0;private wakeLock:WakeLockSentinel|null=null;private readonly onFinished:()=>Promise<void>;private grading=false;private autoHandle=0;
- constructor(onFinished:()=>Promise<void>){this.onFinished=onFinished;this.elements={screen:byId('review-screen'),close:byId('review-close'),progress:byId('review-progress'),timer:byId('review-timer'),favorite:byId('review-favorite'),flag:byId('review-flag'),bury:byId('review-bury'),suspend:byId('review-suspend'),replay:byId('review-replay'),number:byId('review-number'),question:byId('review-question'),tags:byId('review-tags'),showAnswer:byId('show-answer'),answerPanel:byId('answer-panel'),answer:byId('review-answer'),explanation:byId('review-explanation'),choiceList:byId('choice-list'),typeArea:byId('type-answer-area'),typeInput:byId('type-answer-input'),typeCheck:byId('type-answer-check'),typeResult:byId('type-answer-result'),io:byId('review-io'),ratingRow:byId('rating-row'),canvas:byId('scratch-pad'),pen:byId('pad-pen'),eraser:byId('pad-eraser'),undo:byId('pad-undo'),redo:byId('pad-redo'),clear:byId('pad-clear'),card:byId('review-card')};this.pad=new ScratchPad(this.elements.canvas);this.bindEvents();}
- async start(session:ReviewSession):Promise<void>{this.session=session;[this.state,this.preferences]=await Promise.all([getAnkiState(),getSettings()]);await saveCurrentSession(session);this.elements.screen.hidden=false;document.body.style.overflow='hidden';await this.requestWakeLock();await this.loadCurrent();}
+ private readonly elements:ReviewElements;
+ private readonly pad:ScratchPad;
+ private session:ReviewSession|null=null;
+ private currentCard:StudyCard|null=null;
+ private state:AnkiState|null=null;
+ private preferences:AppSettings|null=null;
+ private questionStartedAt=0;
+ private responseMs=0;
+ private answeredCorrectly=true;
+ private timerHandle=0;
+ private wakeLock:WakeLockSentinel|null=null;
+ private readonly onFinished:()=>Promise<void>;
+ private grading=false;
+ private autoHandle=0;
+
+ constructor(onFinished:()=>Promise<void>){
+  this.onFinished=onFinished;
+  this.elements={screen:byId('review-screen'),close:byId('review-close'),progress:byId('review-progress'),timer:byId('review-timer'),favorite:byId('review-favorite'),flag:byId('review-flag'),bury:byId('review-bury'),suspend:byId('review-suspend'),replay:byId('review-replay'),number:byId('review-number'),question:byId('review-question'),tags:byId('review-tags'),showAnswer:byId('show-answer'),answerPanel:byId('answer-panel'),answer:byId('review-answer'),explanation:byId('review-explanation'),choiceList:byId('choice-list'),typeArea:byId('type-answer-area'),typeInput:byId('type-answer-input'),typeCheck:byId('type-answer-check'),typeResult:byId('type-answer-result'),io:byId('review-io'),ratingRow:byId('rating-row'),canvas:byId('scratch-pad'),pen:byId('pad-pen'),eraser:byId('pad-eraser'),undo:byId('pad-undo'),redo:byId('pad-redo'),clear:byId('pad-clear'),card:byId('review-card')};
+  this.pad=new ScratchPad(this.elements.canvas);
+  this.bindEvents();
+ }
+
+ async start(session:ReviewSession):Promise<void>{
+  this.session=session;
+  [this.state,this.preferences]=await Promise.all([getAnkiState(),getSettings()]);
+  await saveCurrentSession(session);
+  this.elements.screen.hidden=false;
+  document.body.style.overflow='hidden';
+  await this.requestWakeLock();
+  await this.loadCurrent();
+ }
+
  async resume(session:ReviewSession):Promise<void>{await this.start(session)}
- private bindEvents(){this.elements.close.addEventListener('click',()=>void this.exit());this.elements.showAnswer.addEventListener('click',()=>this.revealAnswer());this.elements.favorite.addEventListener('click',()=>void this.toggleFavorite());this.elements.flag.addEventListener('click',()=>void this.cycleFlag());this.elements.bury.addEventListener('click',()=>void this.buryCard());this.elements.suspend.addEventListener('click',()=>void this.suspendCard());this.elements.replay.addEventListener('click',()=>replayMedia(this.elements.card));this.elements.typeCheck.addEventListener('click',()=>this.checkTypedAnswer());this.elements.typeInput.addEventListener('keydown',(e)=>{if(e.key==='Enter'){e.preventDefault();this.checkTypedAnswer();}});this.elements.pen.addEventListener('click',()=>this.setEraser(false));this.elements.eraser.addEventListener('click',()=>this.setEraser(true));this.elements.undo.addEventListener('click',()=>this.pad.undo());this.elements.redo.addEventListener('click',()=>this.pad.redo());this.elements.clear.addEventListener('click',()=>this.pad.clear());this.elements.ratingRow.querySelectorAll<HTMLButtonElement>('[data-rating]').forEach(b=>b.addEventListener('click',()=>{const r=b.dataset.rating as Rating|undefined;if(r)void this.grade(r)}));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&this.session)void this.requestWakeLock()});document.addEventListener('keydown',(e)=>this.keyboard(e));}
- private keyboard(e:KeyboardEvent){if(!this.session||this.elements.screen.hidden||['INPUT','TEXTAREA','SELECT'].includes((e.target as HTMLElement)?.tagName))return;if(e.key===' '&&this.preferences?.spacebarAnswers!==false){e.preventDefault();if(this.elements.ratingRow.hidden)this.revealAnswer();return;}const map:Record<string,Rating>={'1':'again','2':'hard','3':'good','4':'easy'};const r=map[e.key];if(r&&!this.elements.ratingRow.hidden){e.preventDefault();void this.grade(r)}if(e.key.toLowerCase()==='r')replayMedia(this.elements.card);}
+
+ private bindEvents(){
+  this.elements.close.addEventListener('click',()=>void this.exit());
+  this.elements.showAnswer.addEventListener('click',()=>this.revealAnswer());
+  this.elements.favorite.addEventListener('click',()=>void this.toggleFavorite());
+  this.elements.flag.addEventListener('click',()=>void this.cycleFlag());
+  this.elements.bury.addEventListener('click',()=>void this.buryCard());
+  this.elements.suspend.addEventListener('click',()=>void this.suspendCard());
+  this.elements.replay.addEventListener('click',()=>replayMedia(this.elements.card));
+  this.elements.typeCheck.addEventListener('click',()=>this.checkTypedAnswer());
+  this.elements.typeInput.addEventListener('keydown',(e)=>{if(e.key==='Enter'){e.preventDefault();this.checkTypedAnswer();}});
+  this.elements.pen.addEventListener('click',()=>this.setEraser(false));
+  this.elements.eraser.addEventListener('click',()=>this.setEraser(true));
+  this.elements.undo.addEventListener('click',()=>this.pad.undo());
+  this.elements.redo.addEventListener('click',()=>this.pad.redo());
+  this.elements.clear.addEventListener('click',()=>this.pad.clear());
+  this.elements.ratingRow.querySelectorAll<HTMLButtonElement>('[data-rating]').forEach(b=>b.addEventListener('click',()=>{const r=b.dataset.rating as Rating|undefined;if(r&&!b.disabled)void this.grade(r)}));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&this.session)void this.requestWakeLock()});
+  document.addEventListener('keydown',(e)=>this.keyboard(e));
+ }
+
+ private keyboard(e:KeyboardEvent){
+  if(!this.session||this.elements.screen.hidden||['INPUT','TEXTAREA','SELECT'].includes((e.target as HTMLElement)?.tagName))return;
+  if(e.key===' '&&this.preferences?.spacebarAnswers!==false){e.preventDefault();if(this.elements.ratingRow.hidden)this.revealAnswer();return;}
+  const map:Record<string,Rating>={'1':'again','2':'hard','3':'good','4':'easy'};
+  const r=map[e.key];
+  if(r&&!this.elements.ratingRow.hidden){
+   const button=this.elements.ratingRow.querySelector<HTMLButtonElement>(`[data-rating="${r}"]`);
+   if(button?.disabled)return;
+   e.preventDefault();void this.grade(r);
+  }
+  if(e.key.toLowerCase()==='r')replayMedia(this.elements.card);
+ }
+
  private setEraser(v:boolean){this.pad.setEraser(v);this.elements.pen.classList.toggle('is-active',!v);this.elements.eraser.classList.toggle('is-active',v)}
  private async requestWakeLock(){if(!('wakeLock'in navigator))return;try{this.wakeLock=await navigator.wakeLock.request('screen')}catch{this.wakeLock=null}}
- private async loadCurrent(){if(!this.session)return;while(this.session.cursor<this.session.queue.length){const id=this.session.queue[this.session.cursor];if(!id)break;const card=await getCard(id);if(card&&!card.deletedAt&&!card.suspended&&(!card.buriedUntil||new Date(card.buriedUntil).getTime()<=Date.now())){this.currentCard=card;await this.renderCurrent(card,this.session.style);return}this.session.cursor++}await this.complete()}
- private async renderCurrent(card:StudyCard,style:ReviewStyle){if(!this.session)return;clearTimeout(this.autoHandle);this.pad.clear();this.setEraser(false);this.elements.number.textContent=card.cardNumber?`No. ${card.cardNumber}`:'';this.elements.tags.textContent=card.tags.join(' · ');await renderRich(this.elements.question,card.question);await renderRich(this.elements.answer,card.answer);await renderRich(this.elements.explanation,card.explanation);this.elements.favorite.textContent=card.favorite?'★':'☆';this.elements.flag.textContent=card.flag?`⚑${card.flag}`:'⚑';this.elements.answerPanel.hidden=true;this.elements.ratingRow.hidden=true;this.elements.typeResult.textContent='';this.elements.typeInput.value='';this.elements.io.replaceChildren();this.renderImageOcclusion(card,false);this.elements.progress.textContent=this.preferences?.showRemainingCount===false?'':`${Math.min(this.session.cursor+1,this.session.queue.length)} / ${this.session.queue.length}`;this.answeredCorrectly=true;this.responseMs=0;this.questionStartedAt=performance.now();this.startTimer();const choices=[plainText(card.answer),...card.distractors].filter(Boolean);const useType=Boolean(card.typedAnswer)||style==='type';const useChoice=!useType&&style==='choice'&&choices.length>=2;this.elements.typeArea.hidden=!useType;this.elements.choiceList.hidden=!useChoice;this.elements.showAnswer.hidden=useChoice||useType;this.elements.choiceList.replaceChildren();if(useChoice)for(const choice of shuffle(choices)){const b=document.createElement('button');b.type='button';b.className='choice-button';b.textContent=choice;b.addEventListener('click',()=>this.chooseAnswer(b,choice));this.elements.choiceList.append(b)}if(useType)window.setTimeout(()=>this.elements.typeInput.focus(),0);const preset=this.state?presetForCard(card,this.state):undefined;this.elements.timer.hidden=preset?.showTimer===false;if(preset?.autoplayAudio)replayMedia(this.elements.card);this.updateRatingPreviews(card,preset);if((preset?.autoAdvanceSeconds??0)>0)this.autoHandle=window.setTimeout(()=>{if(this.session&&this.currentCard?.id===card.id&&this.elements.ratingRow.hidden)this.revealAnswer()},(preset?.autoAdvanceSeconds??0)*1000);}
+
+ private async loadCurrent(){
+  if(!this.session)return;
+  while(this.session.cursor<this.session.queue.length){
+   const id=this.session.queue[this.session.cursor];
+   if(!id)break;
+   const card=await getCard(id);
+   if(card&&!card.deletedAt&&!card.suspended&&(!card.buriedUntil||new Date(card.buriedUntil).getTime()<=Date.now())){
+    this.currentCard=card;
+    await this.renderCurrent(card,this.session.style);
+    return;
+   }
+   this.session.cursor++;
+  }
+  await this.complete();
+ }
+
+ private async choiceCandidates(card:StudyCard):Promise<string[]>{
+  const correct=plainText(card.answer).trim();
+  const cards=await getCards();
+  const sameDeck=cards.filter(item=>item.id!==card.id&&item.deckId===card.deckId);
+  const other=cards.filter(item=>item.id!==card.id&&item.deckId!==card.deckId);
+  const raw=[correct,...card.distractors,...shuffle(sameDeck).map(item=>plainText(item.answer)),...shuffle(other).map(item=>plainText(item.answer))];
+  const seen=new Set<string>();
+  const result:string[]=[];
+  for(const candidate of raw){
+   const text=candidate.trim();
+   const key=normalizeAnswer(text);
+   if(!text||!key||seen.has(key))continue;
+   seen.add(key);result.push(text);
+   if(result.length===4)break;
+  }
+  return result;
+ }
+
+ private async renderCurrent(card:StudyCard,style:ReviewStyle){
+  if(!this.session)return;
+  clearTimeout(this.autoHandle);
+  this.elements.screen.dataset.reviewStyle=style;
+  this.pad.clear();this.setEraser(false);
+  this.elements.number.textContent=card.cardNumber?`No. ${card.cardNumber}`:'';
+  this.elements.tags.textContent=card.tags.join(' · ');
+  await renderRich(this.elements.question,card.question);
+  await renderRich(this.elements.answer,card.answer);
+  await renderRich(this.elements.explanation,card.explanation);
+  this.elements.favorite.textContent=card.favorite?'★':'☆';
+  this.elements.flag.textContent=card.flag?`⚑${card.flag}`:'⚑';
+  this.elements.answerPanel.hidden=true;
+  this.elements.ratingRow.hidden=true;
+  this.elements.typeResult.textContent='';
+  this.elements.typeInput.value='';
+  this.elements.io.replaceChildren();
+  this.renderImageOcclusion(card,false);
+  this.elements.progress.textContent=this.preferences?.showRemainingCount===false?'':`${Math.min(this.session.cursor+1,this.session.queue.length)} / ${this.session.queue.length}`;
+  this.answeredCorrectly=true;this.responseMs=0;this.questionStartedAt=performance.now();this.startTimer();
+  const useType=Boolean(card.typedAnswer)||style==='type'||style==='spell';
+  const choices=useType?[]:await this.choiceCandidates(card);
+  const useChoice=!useType&&style==='choice'&&choices.length>=2;
+  this.elements.typeArea.hidden=!useType;
+  this.elements.choiceList.hidden=!useChoice;
+  this.elements.showAnswer.hidden=useChoice||useType;
+  this.elements.choiceList.replaceChildren();
+  if(useChoice)for(const choice of shuffle(choices)){
+   const b=document.createElement('button');b.type='button';b.className='choice-button';b.textContent=choice;b.addEventListener('click',()=>this.chooseAnswer(b,choice));this.elements.choiceList.append(b);
+  }
+  if(useType)window.setTimeout(()=>this.elements.typeInput.focus(),0);
+  const preset=this.state?presetForCard(card,this.state):undefined;
+  this.elements.timer.hidden=preset?.showTimer===false;
+  if(preset?.autoplayAudio)replayMedia(this.elements.card);
+  this.updateRatingPreviews(card,preset);
+  if((preset?.autoAdvanceSeconds??0)>0)this.autoHandle=window.setTimeout(()=>{if(this.session&&this.currentCard?.id===card.id&&this.elements.ratingRow.hidden)this.revealAnswer()},(preset?.autoAdvanceSeconds??0)*1000);
+ }
+
  private renderImageOcclusion(card:StudyCard,reveal:boolean){
   const data=card.imageOcclusion;
   if(!data){this.elements.io.hidden=true;return}
@@ -42,22 +175,115 @@ export class ReviewController{
     stage.append(node);
    }
   }
-  this.elements.io.replaceChildren(stage)
+  this.elements.io.replaceChildren(stage);
  }
- private updateRatingPreviews(card:StudyCard,preset:ReturnType<typeof presetForCard>):void{const labels:Record<Rating,string>={again:'1 もう一度',hard:'2 難しい',good:'3 普通',easy:'4 簡単'};for(const button of this.elements.ratingRow.querySelectorAll<HTMLButtonElement>('[data-rating]')){const rating=button.dataset.rating as Rating|undefined;if(!rating)continue;button.replaceChildren(document.createTextNode(labels[rating]));if(this.preferences?.showNextReviewTime!==false){const r=scheduleReview(card.schedule,rating,new Date(),{desiredRetention:preset?.desiredRetention,maximumIntervalDays:preset?.maximumIntervalDays,learningStepsMinutes:preset?.learningStepsMinutes,relearningStepsMinutes:preset?.relearningStepsMinutes,parameters:preset?.fsrsParameters,easyDays:preset?.easyDays});const small=document.createElement('small');small.textContent=this.intervalText(r.intervalDays);button.append(small)}}}
+
+ private updateRatingPreviews(card:StudyCard,preset:ReturnType<typeof presetForCard>):void{
+  const labels:Record<Rating,string>={again:'1 もう一度',hard:'2 難しい',good:'3 普通',easy:'4 簡単'};
+  for(const button of this.elements.ratingRow.querySelectorAll<HTMLButtonElement>('[data-rating]')){
+   const rating=button.dataset.rating as Rating|undefined;if(!rating)continue;
+   button.disabled=false;
+   button.replaceChildren(document.createTextNode(labels[rating]));
+   if(this.session?.mode!=='exam'&&this.preferences?.showNextReviewTime!==false){
+    const r=scheduleReview(card.schedule,rating,new Date(),{desiredRetention:preset?.desiredRetention,maximumIntervalDays:preset?.maximumIntervalDays,learningStepsMinutes:preset?.learningStepsMinutes,relearningStepsMinutes:preset?.relearningStepsMinutes,parameters:preset?.fsrsParameters,easyDays:preset?.easyDays});
+    const small=document.createElement('small');small.textContent=this.intervalText(r.intervalDays);button.append(small);
+   }
+  }
+ }
+
  private intervalText(days:number):string{const minutes=Math.round(days*1440);if(minutes<60)return `${Math.max(1,minutes)}分`;const hours=Math.round(days*24);if(hours<24)return `${hours}時間`;if(days<30)return `${Math.round(days)}日`;if(days<365)return `${Math.round(days/30)}か月`;return `${(days/365).toFixed(1)}年`;}
  private stopMedia():void{this.elements.card.querySelectorAll<HTMLMediaElement>('audio,video').forEach(m=>{try{m.pause()}catch{}});if('speechSynthesis'in window)speechSynthesis.cancel();}
  private startTimer(){clearInterval(this.timerHandle);const update=()=>{const elapsed=this.responseMs||performance.now()-this.questionStartedAt;const s=Math.max(0,Math.floor(elapsed/1000));this.elements.timer.textContent=`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`};update();this.timerHandle=window.setInterval(update,250)}
  private stopTimer(){if(!this.responseMs)this.responseMs=Math.max(250,performance.now()-this.questionStartedAt);clearInterval(this.timerHandle)}
- private revealAnswer(){if(!this.currentCard)return;this.stopTimer();if(this.preferences?.interruptAudioOnAnswer!==false)this.stopMedia();this.elements.answerPanel.hidden=false;this.elements.showAnswer.hidden=true;this.elements.typeArea.hidden=true;this.elements.ratingRow.hidden=false;this.renderImageOcclusion(this.currentCard,true);replayMedia(this.elements.answerPanel)}
- private chooseAnswer(button:HTMLButtonElement,choice:string){if(!this.currentCard||!this.elements.ratingRow.hidden)return;this.stopTimer();const correct=normalizeAnswer(choice)===normalizeAnswer(this.currentCard.answer);this.answeredCorrectly=correct;for(const item of this.elements.choiceList.querySelectorAll<HTMLButtonElement>('button')){item.disabled=true;if(normalizeAnswer(item.textContent??'')===normalizeAnswer(this.currentCard.answer))item.classList.add('is-correct')}if(!correct)button.classList.add('is-wrong');this.revealAnswer()}
- private checkTypedAnswer(){if(!this.currentCard||!this.elements.ratingRow.hidden)return;this.stopTimer();const target=this.currentCard.typedAnswer||plainText(this.currentCard.answer);const entered=this.elements.typeInput.value;this.answeredCorrectly=normalizeAnswer(entered)===normalizeAnswer(target);this.elements.typeResult.textContent=this.answeredCorrectly?'✓ 一致':'✗ 正解と異なります';this.elements.typeResult.className=`type-answer-result ${this.answeredCorrectly?'is-correct-text':'is-wrong-text'}`;this.revealAnswer()}
- private async grade(rating:Rating){if(this.grading||!this.session||!this.currentCard||this.elements.ratingRow.hidden)return;this.grading=true;this.elements.ratingRow.hidden=true;try{const now=new Date();const state=this.state??await getAnkiState();const preset=presetForCard(this.currentCard,state);let result=scheduleReview(this.currentCard.schedule,rating,now,{desiredRetention:preset?.desiredRetention,maximumIntervalDays:preset?.maximumIntervalDays,learningStepsMinutes:preset?.learningStepsMinutes,relearningStepsMinutes:preset?.relearningStepsMinutes,parameters:preset?.fsrsParameters,easyDays:preset?.easyDays});const filtered=this.session.filteredDeckId?state.filteredDecks.find(d=>d.id===this.session?.filteredDeckId):undefined;if(filtered&&!filtered.reschedule)result={...result,state:this.currentCard.schedule,queue:this.currentCard.queue??(this.currentCard.schedule.reps?'review':'new'),intervalDays:0};const settings=await getSettings();const maxSeconds=preset?.maximumAnswerSeconds??settings.idleTimeoutSeconds;const raw=Math.min(this.responseMs||1000,3600000);const include=raw<=maxSeconds*1000;const responseMs=include?raw:0;const isCorrect=this.session.style==='self'&&!this.currentCard.typedAnswer?rating!=='again':this.answeredCorrectly;const requestId=uid('req');const times=include?[...this.currentCard.stats.lastTimesMs,raw].slice(-10):[...this.currentCard.stats.lastTimesMs];const nextLapses=result.state.lapses;const threshold=Math.max(1,preset?.leechThreshold??8);const leechHit=rating==='again'&&this.currentCard.schedule.reps>0&&nextLapses>=threshold&&((nextLapses-threshold)%Math.max(1,Math.floor(threshold/2))===0);const leechTags=leechHit?[...new Set([...this.currentCard.tags,'leech'])]:this.currentCard.tags;const updated:StudyCard={...this.currentCard,tags:leechTags,suspended:leechHit&&preset?.leechAction!=='tag'?true:this.currentCard.suspended,schedule:result.state,queue:result.queue,stats:{correct:this.currentCard.stats.correct+(isCorrect?1:0),incorrect:this.currentCard.stats.incorrect+(isCorrect?0:1),totalTimeMs:this.currentCard.stats.totalTimeMs+responseMs,fastestMs:include?(this.currentCard.stats.fastestMs===null?raw:Math.min(this.currentCard.stats.fastestMs,raw)):this.currentCard.stats.fastestMs,lastTimesMs:times},updatedAt:now.toISOString(),version:this.currentCard.version+1,lastRequestId:requestId};const history:ReviewHistory={id:uid('history'),cardId:updated.id,cardNumberSnapshot:updated.cardNumber??'',questionSnapshot:plainText(updated.question),tags:[...updated.tags],rating,isCorrect,responseMs,reviewedAt:now.toISOString(),nextDue:result.state.due,device:deviceLabel(),requestId:uid('req')};await pushUndo('復習',[this.currentCard]);await saveCard(updated);if(leechHit&&updated.noteId){const latest=await getAnkiState();await saveAnkiState({...latest,notes:latest.notes.map(n=>n.id===updated.noteId?{...n,tags:[...new Set([...n.tags,'leech'])],updatedAt:nowIso()}:n)});}await saveQueueItem({requestId,action:'upsertCard',payload:{card:updated},createdAt:nowIso(),attempts:0});await saveHistory(history);await saveQueueItem({requestId:history.requestId,action:'appendHistory',payload:{history},createdAt:nowIso(),attempts:0});await this.burySiblings(updated,state,preset?.buryNewSiblings??true,preset?.buryReviewSiblings??true,preset?.buryInterdayLearningSiblings??true);if(rating==='again'){const at=Math.min(this.session.cursor+5,this.session.queue.length);if(!this.session.queue.slice(this.session.cursor+1).includes(updated.id))this.session.queue.splice(at,0,updated.id)}this.session.cursor++;this.session.answered++;await saveCurrentSession(this.session);await this.loadCurrent()}finally{this.grading=false}}
+
+ private isAutoGraded():boolean{return Boolean(this.currentCard?.typedAnswer)||this.session?.style==='choice'||this.session?.style==='type'||this.session?.style==='spell'}
+ private applyAutomaticRatingGuard():void{
+  if(!this.isAutoGraded()||this.answeredCorrectly)return;
+  for(const button of this.elements.ratingRow.querySelectorAll<HTMLButtonElement>('[data-rating]'))button.disabled=button.dataset.rating!=='again';
+ }
+
+ private revealAnswer(){
+  if(!this.currentCard)return;
+  this.stopTimer();
+  if(this.preferences?.interruptAudioOnAnswer!==false)this.stopMedia();
+  this.elements.answerPanel.hidden=false;
+  this.elements.showAnswer.hidden=true;
+  this.elements.typeArea.hidden=true;
+  this.elements.ratingRow.hidden=false;
+  this.renderImageOcclusion(this.currentCard,true);
+  this.applyAutomaticRatingGuard();
+  replayMedia(this.elements.answerPanel);
+ }
+
+ private chooseAnswer(button:HTMLButtonElement,choice:string){
+  if(!this.currentCard||!this.elements.ratingRow.hidden)return;
+  this.stopTimer();
+  const correct=normalizeAnswer(choice)===normalizeAnswer(this.currentCard.answer);
+  this.answeredCorrectly=correct;
+  for(const item of this.elements.choiceList.querySelectorAll<HTMLButtonElement>('button')){item.disabled=true;if(normalizeAnswer(item.textContent??'')===normalizeAnswer(this.currentCard.answer))item.classList.add('is-correct')}
+  if(!correct)button.classList.add('is-wrong');
+  this.revealAnswer();
+ }
+
+ private checkTypedAnswer(){
+  if(!this.currentCard||!this.elements.ratingRow.hidden)return;
+  this.stopTimer();
+  const target=this.currentCard.typedAnswer||plainText(this.currentCard.answer);
+  const entered=this.elements.typeInput.value;
+  this.answeredCorrectly=normalizeAnswer(entered)===normalizeAnswer(target);
+  this.elements.typeResult.textContent=this.answeredCorrectly?'✓ 一致':'✗ 正解と異なります';
+  this.elements.typeResult.className=`type-answer-result ${this.answeredCorrectly?'is-correct-text':'is-wrong-text'}`;
+  this.revealAnswer();
+ }
+
+ private async grade(rating:Rating){
+  if(this.grading||!this.session||!this.currentCard||this.elements.ratingRow.hidden)return;
+  this.grading=true;this.elements.ratingRow.hidden=true;
+  try{
+   const now=new Date();
+   const state=this.state??await getAnkiState();
+   const preset=presetForCard(this.currentCard,state);
+   const effectiveRating=this.isAutoGraded()&&!this.answeredCorrectly?'again':rating;
+   let result=scheduleReview(this.currentCard.schedule,effectiveRating,now,{desiredRetention:preset?.desiredRetention,maximumIntervalDays:preset?.maximumIntervalDays,learningStepsMinutes:preset?.learningStepsMinutes,relearningStepsMinutes:preset?.relearningStepsMinutes,parameters:preset?.fsrsParameters,easyDays:preset?.easyDays});
+   const filtered=this.session.filteredDeckId?state.filteredDecks.find(d=>d.id===this.session?.filteredDeckId):undefined;
+   const reschedule=this.session.mode!=='exam'&&!(filtered&&!filtered.reschedule);
+   if(!reschedule)result={...result,state:this.currentCard.schedule,queue:this.currentCard.queue??(this.currentCard.schedule.reps?'review':'new'),intervalDays:0};
+   const settings=await getSettings();
+   const maxSeconds=preset?.maximumAnswerSeconds??settings.idleTimeoutSeconds;
+   const raw=Math.min(this.responseMs||1000,3600000);
+   const include=raw<=maxSeconds*1000;
+   const responseMs=include?raw:0;
+   const isCorrect=this.isAutoGraded()?this.answeredCorrectly:effectiveRating!=='again';
+   const requestId=uid('req');
+   const times=include?[...this.currentCard.stats.lastTimesMs,raw].slice(-10):[...this.currentCard.stats.lastTimesMs];
+   const nextLapses=result.state.lapses;
+   const threshold=Math.max(1,preset?.leechThreshold??8);
+   const leechHit=reschedule&&effectiveRating==='again'&&this.currentCard.schedule.reps>0&&nextLapses>=threshold&&((nextLapses-threshold)%Math.max(1,Math.floor(threshold/2))===0);
+   const leechTags=leechHit?[...new Set([...this.currentCard.tags,'leech'])]:this.currentCard.tags;
+   const updated:StudyCard={...this.currentCard,tags:leechTags,suspended:leechHit&&preset?.leechAction!=='tag'?true:this.currentCard.suspended,schedule:result.state,queue:result.queue,stats:{correct:this.currentCard.stats.correct+(isCorrect?1:0),incorrect:this.currentCard.stats.incorrect+(isCorrect?0:1),totalTimeMs:this.currentCard.stats.totalTimeMs+responseMs,fastestMs:include?(this.currentCard.stats.fastestMs===null?raw:Math.min(this.currentCard.stats.fastestMs,raw)):this.currentCard.stats.fastestMs,lastTimesMs:times},updatedAt:now.toISOString(),version:this.currentCard.version+1,lastRequestId:requestId};
+   const history:ReviewHistory={id:uid('history'),cardId:updated.id,cardNumberSnapshot:updated.cardNumber??'',questionSnapshot:plainText(updated.question),tags:[...updated.tags],rating:effectiveRating,isCorrect,responseMs,reviewedAt:now.toISOString(),nextDue:result.state.due,device:deviceLabel(),requestId:uid('req')};
+   await pushUndo(this.session.mode==='exam'?'模擬テスト':'復習',[this.currentCard]);
+   await saveCard(updated);
+   if(leechHit&&updated.noteId){const latest=await getAnkiState();await saveAnkiState({...latest,notes:latest.notes.map(n=>n.id===updated.noteId?{...n,tags:[...new Set([...n.tags,'leech'])],updatedAt:nowIso()}:n)});}
+   await saveQueueItem({requestId,action:'upsertCard',payload:{card:updated},createdAt:nowIso(),attempts:0});
+   await saveHistory(history);
+   await saveQueueItem({requestId:history.requestId,action:'appendHistory',payload:{history},createdAt:nowIso(),attempts:0});
+   if(reschedule)await this.burySiblings(updated,state,preset?.buryNewSiblings??true,preset?.buryReviewSiblings??true,preset?.buryInterdayLearningSiblings??true);
+   if(reschedule&&effectiveRating==='again'){
+    const at=Math.min(this.session.cursor+5,this.session.queue.length);
+    if(!this.session.queue.slice(this.session.cursor+1).includes(updated.id))this.session.queue.splice(at,0,updated.id);
+   }
+   this.session.cursor++;this.session.answered++;
+   await saveCurrentSession(this.session);
+   await this.loadCurrent();
+  }finally{this.grading=false}
+ }
+
  private async burySiblings(card:StudyCard,state:AnkiState,buryNew:boolean,buryReview:boolean,buryLearning:boolean){if(!card.siblingGroup)return;const cards=await getCards();const tomorrow=new Date();tomorrow.setHours(24,0,0,0);const siblings=cards.filter(c=>c.id!==card.id&&c.siblingGroup===card.siblingGroup&&!c.deletedAt&&!c.suspended).filter(c=>{const q=c.queue??(c.schedule.reps?'review':'new');return q==='new'?buryNew:q==='review'?buryReview:buryLearning});if(!siblings.length)return;await saveCards(siblings.map(c=>({...c,buriedUntil:tomorrow.toISOString(),updatedAt:nowIso(),version:c.version+1})));this.state=state}
  private async toggleFavorite(){if(!this.currentCard)return;const requestId=uid('req');const updated={...this.currentCard,favorite:!this.currentCard.favorite,marked:!this.currentCard.favorite,updatedAt:nowIso(),version:this.currentCard.version+1,lastRequestId:requestId};this.currentCard=updated;this.elements.favorite.textContent=updated.favorite?'★':'☆';await saveCard(updated);await saveQueueItem({requestId,action:'upsertCard',payload:{card:updated},createdAt:nowIso(),attempts:0})}
  private async cycleFlag(){if(!this.currentCard)return;const flag=((this.currentCard.flag??0)+1)%8 as CardFlag;this.currentCard={...this.currentCard,flag,updatedAt:nowIso(),version:this.currentCard.version+1};this.elements.flag.textContent=flag?`⚑${flag}`:'⚑';await saveCard(this.currentCard)}
  private async buryCard(){if(!this.currentCard||!this.session)return;const tomorrow=new Date();tomorrow.setHours(24,0,0,0);await saveCard({...this.currentCard,buriedUntil:tomorrow.toISOString(),updatedAt:nowIso(),version:this.currentCard.version+1});this.session.cursor++;await saveCurrentSession(this.session);await this.loadCurrent()}
  private async suspendCard(){if(!this.currentCard||!this.session)return;await saveCard({...this.currentCard,suspended:true,updatedAt:nowIso(),version:this.currentCard.version+1});this.session.cursor++;await saveCurrentSession(this.session);await this.loadCurrent()}
- private async exit(){clearInterval(this.timerHandle);clearTimeout(this.autoHandle);await this.wakeLock?.release().catch(()=>undefined);this.wakeLock=null;this.elements.screen.hidden=true;document.body.style.overflow='';this.pad.clear();await this.onFinished()}
+ private async exit(){clearInterval(this.timerHandle);clearTimeout(this.autoHandle);await this.wakeLock?.release().catch(()=>undefined);this.wakeLock=null;this.elements.screen.hidden=true;delete this.elements.screen.dataset.reviewStyle;document.body.style.overflow='';this.pad.clear();await this.onFinished()}
  private async complete(){await clearCurrentSession();this.session=null;await this.exit()}
 }

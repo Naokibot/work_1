@@ -2,7 +2,7 @@ export type StudyPresetName = 'learn' | 'test' | 'write' | 'spell' | 'wrong';
 
 export interface StudyPreset {
   mode: 'deck' | 'exam' | 'wrong';
-  style: 'self' | 'choice' | 'type';
+  style: 'self' | 'choice' | 'type' | 'spell';
   size: number;
   speech: boolean;
 }
@@ -46,7 +46,7 @@ const PRESETS: Record<StudyPresetName, StudyPreset> = {
   learn: { mode: 'deck', style: 'choice', size: 30, speech: false },
   test: { mode: 'exam', style: 'choice', size: 20, speech: false },
   write: { mode: 'deck', style: 'type', size: 30, speech: false },
-  spell: { mode: 'deck', style: 'type', size: 30, speech: true },
+  spell: { mode: 'deck', style: 'spell', size: 30, speech: true },
   wrong: { mode: 'wrong', style: 'self', size: 30, speech: false }
 };
 
@@ -124,10 +124,9 @@ export function computeExamPlan(
 
   const daysLeft = Math.max(1, localDayNumber(examDate) - localDayNumber(now) + 1);
   const dailyTarget = workload.size ? Math.max(1, Math.ceil(workload.size / daysLeft)) : 0;
-  const activeIds = new Set(active.map((card) => card.id));
   const reviewedToday = new Set(
     history
-      .filter((item) => activeIds.has(item.cardId) && sameLocalDay(new Date(item.reviewedAt), now))
+      .filter((item) => workload.has(item.cardId) && sameLocalDay(new Date(item.reviewedAt), now))
       .map((item) => item.cardId)
   ).size;
   const progressToday = dailyTarget ? Math.min(1, reviewedToday / dailyTarget) : 1;

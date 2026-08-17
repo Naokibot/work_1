@@ -6,7 +6,7 @@ test('study presets map high-value learning modes onto the existing review engin
   assert.deepEqual(studyPreset('learn'), { mode: 'deck', style: 'choice', size: 30, speech: false });
   assert.deepEqual(studyPreset('test'), { mode: 'exam', style: 'choice', size: 20, speech: false });
   assert.deepEqual(studyPreset('write'), { mode: 'deck', style: 'type', size: 30, speech: false });
-  assert.deepEqual(studyPreset('spell'), { mode: 'deck', style: 'type', size: 30, speech: true });
+  assert.deepEqual(studyPreset('spell'), { mode: 'deck', style: 'spell', size: 30, speech: true });
   assert.deepEqual(studyPreset('wrong'), { mode: 'wrong', style: 'self', size: 30, speech: false });
 });
 
@@ -45,6 +45,19 @@ test('exam planner deduplicates unseen, weak, and due cards into a daily target'
   assert.equal(plan.reviewedToday, 1);
   assert.equal(plan.progressToday, 1);
   assert.equal(plan.readiness, 33);
+});
+
+test('exam planner only credits reviews that belong to the workload', () => {
+  const now = new Date(2026, 7, 17, 12, 0, 0);
+  const cards = [
+    { id: 'needs-work', schedule: { reps: 0, due: now.toISOString() }, stats: { correct: 0, incorrect: 0 } },
+    { id: 'stable', schedule: { reps: 8, due: new Date(2027, 0, 1).toISOString() }, stats: { correct: 8, incorrect: 0 } }
+  ];
+  const history = [{ cardId: 'stable', isCorrect: true, reviewedAt: new Date(2026, 7, 17, 9).toISOString() }];
+  const plan = computeExamPlan(cards, history, '2026-08-18', now);
+  assert.equal(plan.workloadCards, 1);
+  assert.equal(plan.reviewedToday, 0);
+  assert.equal(plan.progressToday, 0);
 });
 
 test('exam planner rejects past dates without changing card data', () => {

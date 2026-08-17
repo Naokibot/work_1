@@ -1,6 +1,6 @@
 export type Rating = 'again' | 'hard' | 'good' | 'easy';
 export type ReviewMode = 'due' | 'new' | 'weak' | 'wrong' | 'favorite' | 'random' | 'tag' | 'exam' | 'deck' | 'filtered';
-export type ReviewStyle = 'self' | 'choice' | 'type';
+export type ReviewStyle = 'self' | 'choice' | 'type' | 'spell';
 export type CardQueue = 'new' | 'learning' | 'review' | 'relearning';
 export type CardFlag = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type NoteKind = 'standard' | 'cloze' | 'image-occlusion';

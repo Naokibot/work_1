@@ -1,6 +1,7 @@
 export type Rating = 'again' | 'hard' | 'good' | 'easy';
 export type ReviewMode = 'due' | 'new' | 'weak' | 'wrong' | 'favorite' | 'random' | 'tag' | 'exam' | 'deck' | 'filtered';
 export type ReviewStyle = 'self' | 'choice' | 'type' | 'spell';
+export type ReviewSource = 'scheduled' | 'custom' | 'exam';
 export type CardQueue = 'new' | 'learning' | 'review' | 'relearning';
 export type CardFlag = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type NoteKind = 'standard' | 'cloze' | 'image-occlusion';
@@ -89,6 +90,9 @@ export interface ReviewHistory {
   nextDue: string;
   device: string;
   requestId: string;
+  profileId?: string;
+  source?: ReviewSource;
+  wasNew?: boolean;
 }
 
 export interface FieldDefinition {
@@ -202,7 +206,9 @@ export interface UndoEntry {
   id: string;
   label: string;
   createdAt: string;
+  profileId?: string;
   cards: StudyCard[];
+  notes?: StudyNote[];
 }
 
 export interface AnkiState {
@@ -231,7 +237,7 @@ export interface CollectionSnapshot {
   anki: AnkiState;
 }
 
-export type SyncAction = 'upsertCard' | 'deleteCard' | 'appendHistory';
+export type SyncAction = 'upsertCard' | 'deleteCard' | 'appendHistory' | 'deleteHistory';
 
 export interface SyncQueueItem {
   requestId: string;
@@ -266,6 +272,7 @@ export interface ReviewSession {
   tag: string;
   examSize: number;
   startedAt: string;
+  profileId?: string;
   deckId?: string;
   filteredDeckId?: string;
 }

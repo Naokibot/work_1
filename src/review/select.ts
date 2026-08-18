@@ -69,9 +69,17 @@ function interleave(review: StudyCard[], fresh: StudyCard[]): StudyCard[] {
   return result;
 }
 
-function remainingDailyLimits(history: ReviewHistory[], now: Date, newLimit: number, reviewLimit: number): { newRemaining: number; reviewRemaining: number } {
+function remainingDailyLimits(
+  history: ReviewHistory[],
+  now: Date,
+  newLimit: number,
+  reviewLimit: number,
+  scopedCardIds: ReadonlySet<string>
+): { newRemaining: number; reviewRemaining: number } {
   const today = localDateKey(now);
-  const scheduled = history.filter((item) => (item.source ?? 'scheduled') === 'scheduled' && localDateKey(item.reviewedAt) === today);
+  const scheduled = history.filter((item) => (item.source ?? 'scheduled') === 'scheduled'
+    && scopedCardIds.has(item.cardId)
+    && localDateKey(item.reviewedAt) === today);
   const introduced = new Set(scheduled.filter((item) => item.wasNew === true).map((item) => item.cardId));
   const reviewed = new Set(scheduled.filter((item) => item.wasNew !== true).map((item) => item.cardId));
   return {
@@ -83,11 +91,13 @@ function remainingDailyLimits(history: ReviewHistory[], now: Date, newLimit: num
 export function selectCards(cards: StudyCard[], history: ReviewHistory[], options: SelectionOptions): StudyCard[] {
   const now = options.now ?? new Date();
   const latest = latestHistoryByCard(history);
-  let active = cards.filter((card) => available(card, now));
-  if (options.state && options.deckId) active = cardsInDeck(active, options.state, options.deckId, true);
+  let scoped = cards;
+  if (options.state && options.deckId) scoped = cardsInDeck(cards, options.state, options.deckId, true);
+  const active = scoped.filter((card) => available(card, now));
   const configuredNew = options.newLimit ?? 20;
   const configuredReview = options.reviewLimit ?? 200;
-  const { newRemaining, reviewRemaining } = remainingDailyLimits(history, now, configuredNew, configuredReview);
+  const scopedCardIds = new Set(scoped.map((card) => card.id));
+  const { newRemaining, reviewRemaining } = remainingDailyLimits(history, now, configuredNew, configuredReview, scopedCardIds);
 
   switch (options.mode) {
     case 'new':

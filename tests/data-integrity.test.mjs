@@ -46,7 +46,7 @@ function history(id, cardId, reviewedAt, overrides = {}) {
 
 test('daily new limit is a calendar-day budget, not a per-session limit', () => {
   const now = new Date(2026, 7, 18, 12, 0, 0);
-  const cards = [card('n1'), card('n2'), card('n3')];
+  const cards = [card('n1'), card('n2'), card('n3'), card('done1'), card('done2')];
   const today = now.toISOString();
   const reviews = [
     history('h1', 'done1', today, { wasNew: true }),
@@ -58,9 +58,27 @@ test('daily new limit is a calendar-day budget, not a per-session limit', () => 
 test('daily review limit only leaves the remaining scheduled budget', () => {
   const now = new Date(2026, 7, 18, 12, 0, 0);
   const due = { ...initialSchedule(now), reps: 3, stability: 5, due: new Date(now.getTime() - 1000).toISOString(), lastReview: new Date(now.getTime() - 86400000).toISOString() };
-  const cards = [card('r1', { queue: 'review', schedule: due }), card('r2', { queue: 'review', schedule: due })];
+  const cards = [card('r1', { queue: 'review', schedule: due }), card('r2', { queue: 'review', schedule: due }), card('previous', { queue: 'review', schedule: due })];
   const reviews = [history('h3', 'previous', now.toISOString(), { wasNew: false })];
   assert.equal(selectCards(cards, reviews, { mode: 'due', reviewLimit: 2, now }).length, 1);
+});
+
+test('daily limits only count reviews from the selected deck tree', () => {
+  const now = new Date(2026, 7, 18, 12, 0, 0);
+  const state = {
+    activeProfileId: 'p',
+    decks: [
+      { id: 'deck_a', profileId: 'p', name: 'A', presetId: 'preset' },
+      { id: 'deck_b', profileId: 'p', name: 'B', presetId: 'preset' }
+    ],
+    presets: [{ id: 'preset', newGatherOrder: 'ascending', reviewOrder: 'due', newReviewOrder: 'after' }]
+  };
+  const cards = [
+    card('a_new', { profileId: 'p', deckId: 'deck_a' }),
+    card('b_done', { profileId: 'p', deckId: 'deck_b' })
+  ];
+  const reviews = [history('other', 'b_done', now.toISOString(), { wasNew: true, profileId: 'p' })];
+  assert.deepEqual(selectCards(cards, reviews, { mode: 'new', state, deckId: 'deck_a', newLimit: 1, now }).map((item) => item.id), ['a_new']);
 });
 
 test('mock-test history does not affect FSRS evaluation or retention', () => {

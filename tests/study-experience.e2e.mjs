@@ -135,9 +135,12 @@ async function run(name, engine) {
     await page.waitForFunction(() => document.querySelectorAll('#choice-list .choice-button').length === 4);
     const before = await currentCardSnapshot(page);
     const choices = await page.locator('#choice-list .choice-button').allTextContents();
-    const wrong = choices.find((value) => value.trim() !== before.answer.trim());
+    const correctChoice = (await page.locator('#review-answer').innerText()).trim();
+    const wrong = choices.find((value) => value.trim() !== correctChoice);
     assert.ok(wrong, `${name}: Test has a wrong choice`);
     await page.getByRole('button', { name: wrong, exact: true }).click();
+    await page.waitForSelector('#rating-row:not([hidden])');
+    await page.waitForFunction(() => document.querySelector('#rating-row [data-rating="good"]')?.disabled === true);
     assert.equal(await page.locator('#rating-row [data-rating="again"]').isDisabled(), false, `${name}: Again stays enabled after a wrong answer`);
     assert.equal(await page.locator('#rating-row [data-rating="good"]').isDisabled(), true, `${name}: Good is disabled after a wrong answer`);
     assert.equal(await page.locator('#rating-row [data-rating="easy"]').isDisabled(), true, `${name}: Easy is disabled after a wrong answer`);

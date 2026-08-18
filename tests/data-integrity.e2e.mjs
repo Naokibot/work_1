@@ -63,10 +63,12 @@ async function run(name, engine) {
       const queued=(await db.getQueue()).filter(item=>item.action==='upsertCard'&&item.payload.card?.id==='card_integrity_b');
 
       await db.replaceCollection([a,b],[],state);
-      await collection.pushUndo('review integrity',[a]);
-      const changed={...a,version:2,updatedAt:'2026-08-18T00:03:00.000Z',flag:4};
+      const reviewNow=new Date().toISOString();
+      const undoHistory={...historyA,id:'history_integrity_undo',reviewedAt:reviewNow,nextDue:reviewNow,requestId:'req_historyundo000'};
+      await collection.pushUndo('復習',[a]);
+      const changed={...a,version:2,updatedAt:reviewNow,flag:4};
       await db.saveCard(changed);
-      await db.saveHistory(historyA);
+      await db.saveHistory(undoHistory);
       await collection.undoLast();
       const undone=await db.getCard('card_integrity_a');
       const historyAfterUndo=await db.getHistory();
@@ -82,7 +84,7 @@ async function run(name, engine) {
         queueRequestIds:queued.map(item=>item.requestId),
         undoneFlag:undone?.flag??0,
         historyAfterUndo:historyAfterUndo.map(item=>item.id),
-        appendAfterUndo:queueAfterUndo.filter(item=>item.action==='appendHistory'&&item.payload.history?.id==='history_integrity_a').length
+        appendAfterUndo:queueAfterUndo.filter(item=>item.action==='appendHistory'&&item.payload.history?.id==='history_integrity_undo').length
       };
     });
 
@@ -95,7 +97,7 @@ async function run(name, engine) {
     assert.equal(result.queueRequestIds.length,2,`${name}: both local edits enter sync queue`);
     assert.notEqual(result.queueRequestIds[0],result.queueRequestIds[1],`${name}: local edits get fresh request IDs`);
     assert.equal(result.undoneFlag,0,`${name}: undo restores card state`);
-    assert.ok(!result.historyAfterUndo.includes('history_integrity_a'),`${name}: undo removes generated history`);
+    assert.ok(!result.historyAfterUndo.includes('history_integrity_undo'),`${name}: undo removes generated history`);
     assert.equal(result.appendAfterUndo,0,`${name}: undo removes unsent history queue entry`);
     await context.close();
     process.stdout.write(`data-integrity:${name}:pass\n`);

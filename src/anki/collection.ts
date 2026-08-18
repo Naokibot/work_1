@@ -17,7 +17,6 @@ import {
   pruneSnapshots,
   replaceCollection,
   saveAnkiState,
-  saveCard,
   saveCards,
   saveSnapshot
 } from '../storage/db.js';
@@ -35,6 +34,7 @@ import { searchCards } from './search.js';
 import { nowIso, uid } from '../utils/core.js';
 
 const HOUR_MS = 3_600_000;
+const REVIEW_UNDO_WINDOW_MS = 30_000;
 
 export async function initializeAnkiCollection(): Promise<{ migratedCards: number; notesAdded: number }> {
   const state = await getAnkiState();
@@ -286,13 +286,21 @@ export async function undoLast(): Promise<string | null> {
   }
   if (index < 0) return null;
   const entry = state.undo[index]!;
-  const cardIds = new Set(entry.cards.map((card) => card.id));
-  const history = await getHistory(true);
-  const createdAt = new Date(entry.createdAt).getTime();
-  const generatedHistory = history.filter((item) => cardIds.has(item.cardId)
-    && (item.profileId ?? entry.profileId ?? state.activeProfileId) === (entry.profileId ?? state.activeProfileId)
-    && new Date(item.reviewedAt).getTime() >= createdAt);
-  for (const item of generatedHistory) await deleteHistory(item.id);
+  const profileId = entry.profileId ?? state.activeProfileId;
+  if (entry.label === '復習' || entry.label === '模擬テスト') {
+    const cardIds = new Set(entry.cards.map((card) => card.id));
+    const createdAt = new Date(entry.createdAt).getTime();
+    const history = (await getHistory(true))
+      .filter((item) => cardIds.has(item.cardId) && (item.profileId ?? profileId) === profileId)
+      .filter((item) => Math.abs(new Date(item.reviewedAt).getTime() - createdAt) <= REVIEW_UNDO_WINDOW_MS)
+      .sort((a, b) => b.reviewedAt.localeCompare(a.reviewedAt));
+    const removedCards = new Set<string>();
+    for (const item of history) {
+      if (removedCards.has(item.cardId)) continue;
+      removedCards.add(item.cardId);
+      await deleteHistory(item.id);
+    }
+  }
   await saveCards(entry.cards);
   const latest = await getAnkiState();
   const noteSnapshots = new Map((entry.notes ?? []).map((note) => [note.id, note]));
@@ -390,7 +398,7 @@ export async function importTextCards(text: string, deckId = DEFAULT_DECK_ID, no
   const delimiter = text.includes('\t') ? '\t' : ',';
   const rows = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim()).map((line) => parseDelimitedLine(line, delimiter));
   let count = 0;
-  let nextState = { ...state, notes: [...state.notes] };
+  const nextState = { ...state, notes: [...state.notes] };
   const generated: StudyCard[] = [];
   for (const row of rows) {
     const front = row[0]?.trim() ?? '';

@@ -92,10 +92,6 @@ async function deleteOne(storeName: StoreName, key: IDBValidKey): Promise<void> 
   await transactionDone(transaction);
 }
 
-function requestIdForCard(card: StudyCard): string {
-  return /^req_[A-Za-z0-9_-]{12,}$/u.test(card.lastRequestId ?? '') ? String(card.lastRequestId) : uid('req');
-}
-
 function cardQueueItem(card: StudyCard, requestId: string): SyncQueueItem {
   return {
     requestId,
@@ -124,7 +120,7 @@ export async function getCard(id: string, allProfiles = false): Promise<StudyCar
 
 export async function saveCard(card: StudyCard, enqueue = true): Promise<void> {
   if (!enqueue) return putOne('cards', card);
-  const requestId = requestIdForCard(card);
+  const requestId = uid('req');
   const stored = { ...card, lastRequestId: requestId };
   const db = await openDatabase();
   const transaction = db.transaction(['cards', 'queue'], 'readwrite');
@@ -144,7 +140,7 @@ export async function saveCards(cards: StudyCard[], enqueue = true): Promise<voi
       store.put(card);
       continue;
     }
-    const requestId = requestIdForCard(card);
+    const requestId = uid('req');
     const stored = { ...card, lastRequestId: requestId };
     store.put(stored);
     queue.put(cardQueueItem(stored, requestId));
@@ -165,7 +161,7 @@ export async function getHistory(allProfiles = false): Promise<ReviewHistory[]> 
 export async function saveHistory(history: ReviewHistory, enqueue = true): Promise<void> {
   const card = history.profileId ? undefined : await getCard(history.cardId, true);
   const state = history.profileId || card ? undefined : await getAnkiState();
-  const requestId = /^req_[A-Za-z0-9_-]{12,}$/u.test(history.requestId ?? '') ? history.requestId : uid('req');
+  const requestId = enqueue ? uid('req') : history.requestId;
   const stored: ReviewHistory = {
     ...history,
     requestId,

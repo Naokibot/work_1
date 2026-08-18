@@ -1,6 +1,7 @@
 import type { AnkiState, ReviewHistory, ReviewMode, StudyCard } from '../types.js';
 import { isDue, retrievability } from '../scheduler/scheduler.js';
 import { shuffle } from '../utils/core.js';
+import { localDateKey } from '../utils/local-date.js';
 import { cardsInDeck } from '../anki/collection.js';
 
 export interface SelectionOptions {
@@ -26,6 +27,7 @@ function available(card: StudyCard, now: Date): boolean {
 }
 
 function newCards(cards: StudyCard[], limit: number, state?: AnkiState, deckId?: string): StudyCard[] {
+  if (limit <= 0) return [];
   const result = cards.filter((card) => (card.queue ?? (card.schedule.reps === 0 ? 'new' : 'review')) === 'new');
   if (state) {
     const deck = state.decks.find((item) => item.id === (deckId ?? result[0]?.deckId));
@@ -50,7 +52,7 @@ function dueCards(cards: StudyCard[], now: Date, limit: number, state?: AnkiStat
     else if (preset?.reviewOrder === 'retrievability') reviews.sort((a, b) => retrievability(a.schedule, now) - retrievability(b.schedule, now));
     else reviews.sort((a, b) => a.schedule.due.localeCompare(b.schedule.due));
   } else reviews.sort((a, b) => a.schedule.due.localeCompare(b.schedule.due));
-  return [...learning, ...reviews.slice(0, limit)];
+  return [...learning, ...reviews.slice(0, Math.max(0, limit))];
 }
 
 function interleave(review: StudyCard[], fresh: StudyCard[]): StudyCard[] {
@@ -67,15 +69,29 @@ function interleave(review: StudyCard[], fresh: StudyCard[]): StudyCard[] {
   return result;
 }
 
+function remainingDailyLimits(history: ReviewHistory[], now: Date, newLimit: number, reviewLimit: number): { newRemaining: number; reviewRemaining: number } {
+  const today = localDateKey(now);
+  const scheduled = history.filter((item) => (item.source ?? 'scheduled') === 'scheduled' && localDateKey(item.reviewedAt) === today);
+  const introduced = new Set(scheduled.filter((item) => item.wasNew === true).map((item) => item.cardId));
+  const reviewed = new Set(scheduled.filter((item) => item.wasNew !== true).map((item) => item.cardId));
+  return {
+    newRemaining: Math.max(0, newLimit - introduced.size),
+    reviewRemaining: Math.max(0, reviewLimit - reviewed.size)
+  };
+}
+
 export function selectCards(cards: StudyCard[], history: ReviewHistory[], options: SelectionOptions): StudyCard[] {
   const now = options.now ?? new Date();
   const latest = latestHistoryByCard(history);
   let active = cards.filter((card) => available(card, now));
   if (options.state && options.deckId) active = cardsInDeck(active, options.state, options.deckId, true);
+  const configuredNew = options.newLimit ?? 20;
+  const configuredReview = options.reviewLimit ?? 200;
+  const { newRemaining, reviewRemaining } = remainingDailyLimits(history, now, configuredNew, configuredReview);
 
   switch (options.mode) {
     case 'new':
-      return newCards(active, options.newLimit ?? 20, options.state, options.deckId);
+      return newCards(active, newRemaining, options.state, options.deckId);
     case 'weak':
       return active.filter((card) => { const attempts = card.stats.correct + card.stats.incorrect; return attempts >= 2 && card.stats.correct / attempts < 0.7; });
     case 'wrong':
@@ -89,8 +105,8 @@ export function selectCards(cards: StudyCard[], history: ReviewHistory[], option
     case 'random':
       return shuffle(active);
     case 'deck': {
-      const reviews = dueCards(active, now, options.reviewLimit ?? 200, options.state, options.deckId);
-      const fresh = newCards(active, options.newLimit ?? 20, options.state, options.deckId);
+      const reviews = dueCards(active, now, reviewRemaining, options.state, options.deckId);
+      const fresh = newCards(active, newRemaining, options.state, options.deckId);
       const deck = options.state?.decks.find((item) => item.id === options.deckId);
       const preset = options.state?.presets.find((item) => item.id === deck?.presetId) ?? options.state?.presets[0];
       if (preset?.newReviewOrder === 'before') return [...fresh, ...reviews];
@@ -98,8 +114,9 @@ export function selectCards(cards: StudyCard[], history: ReviewHistory[], option
       return interleave(reviews, fresh);
     }
     case 'filtered':
+      return dueCards(active, now, configuredReview, options.state, options.deckId);
     case 'due':
     default:
-      return dueCards(active, now, options.reviewLimit ?? 200, options.state, options.deckId);
+      return dueCards(active, now, reviewRemaining, options.state, options.deckId);
   }
 }

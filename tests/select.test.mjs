@@ -18,6 +18,7 @@ function card(id, overrides = {}) {
     schedule: initialSchedule(new Date('2026-08-01T00:00:00.000Z')),
     stats: { correct: 0, incorrect: 0, totalTimeMs: 0, fastestMs: null, lastTimesMs: [] },
     version: 1,
+    profileId: 'default',
     deckId: 'default',
     ...overrides
   };

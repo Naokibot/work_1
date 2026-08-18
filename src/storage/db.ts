@@ -9,9 +9,11 @@ import type {
   SyncQueueItem
 } from '../types.js';
 import { normalizeAnkiState } from '../anki/defaults.js';
+import { nowIso, uid } from '../utils/core.js';
 
 const DB_NAME = 'work_1_study_cards';
 const DB_VERSION = 2;
+const DEFAULT_PROFILE_ID = 'profile_default';
 
 type StoreName = 'cards' | 'history' | 'queue' | 'settings' | 'sessions' | 'conflicts' | 'anki' | 'snapshots';
 
@@ -90,42 +92,123 @@ async function deleteOne(storeName: StoreName, key: IDBValidKey): Promise<void> 
   await transactionDone(transaction);
 }
 
+function cardQueueItem(card: StudyCard, requestId: string): SyncQueueItem {
+  return {
+    requestId,
+    action: card.deletedAt ? 'deleteCard' : 'upsertCard',
+    payload: { card },
+    createdAt: nowIso(),
+    attempts: 0
+  };
+}
+
 export async function getCards(includeDeleted = false, allProfiles = false): Promise<StudyCard[]> {
   let cards = await getAll<StudyCard>('cards');
   if (!allProfiles) {
     const state = await getAnkiState();
-    cards = cards.filter((card) => (card.profileId ?? 'profile_default') === state.activeProfileId);
+    cards = cards.filter((card) => (card.profileId ?? DEFAULT_PROFILE_ID) === state.activeProfileId);
   }
   return includeDeleted ? cards : cards.filter((card) => !card.deletedAt);
 }
 
-export function getCard(id: string): Promise<StudyCard | undefined> {
-  return getOne<StudyCard>('cards', id);
+export async function getCard(id: string, allProfiles = false): Promise<StudyCard | undefined> {
+  const card = await getOne<StudyCard>('cards', id);
+  if (!card || allProfiles) return card;
+  const state = await getAnkiState();
+  return (card.profileId ?? DEFAULT_PROFILE_ID) === state.activeProfileId ? card : undefined;
 }
 
-export function saveCard(card: StudyCard): Promise<void> {
-  return putOne('cards', card);
-}
-
-export async function saveCards(cards: StudyCard[]): Promise<void> {
-  if (!cards.length) return;
+export async function saveCard(card: StudyCard, enqueue = true): Promise<void> {
+  if (!enqueue) return putOne('cards', card);
+  const requestId = uid('req');
+  const stored = { ...card, lastRequestId: requestId };
   const db = await openDatabase();
-  const transaction = db.transaction('cards', 'readwrite');
-  const store = transaction.objectStore('cards');
-  cards.forEach((card) => store.put(card));
+  const transaction = db.transaction(['cards', 'queue'], 'readwrite');
+  transaction.objectStore('cards').put(stored);
+  transaction.objectStore('queue').put(cardQueueItem(stored, requestId));
   await transactionDone(transaction);
 }
 
-export function getHistory(): Promise<ReviewHistory[]> {
-  return getAll('history');
+export async function saveCards(cards: StudyCard[], enqueue = true): Promise<void> {
+  if (!cards.length) return;
+  const db = await openDatabase();
+  const transaction = db.transaction(enqueue ? ['cards', 'queue'] : ['cards'], 'readwrite');
+  const store = transaction.objectStore('cards');
+  const queue = enqueue ? transaction.objectStore('queue') : null;
+  for (const card of cards) {
+    if (!queue) {
+      store.put(card);
+      continue;
+    }
+    const requestId = uid('req');
+    const stored = { ...card, lastRequestId: requestId };
+    store.put(stored);
+    queue.put(cardQueueItem(stored, requestId));
+  }
+  await transactionDone(transaction);
 }
 
-export function saveHistory(history: ReviewHistory): Promise<void> {
-  return putOne('history', history);
+export async function getHistory(allProfiles = false): Promise<ReviewHistory[]> {
+  const history = await getAll<ReviewHistory>('history');
+  if (allProfiles) return history;
+  const [state, cards] = await Promise.all([getAnkiState(), getAll<StudyCard>('cards')]);
+  const activeIds = new Set(cards
+    .filter((card) => (card.profileId ?? DEFAULT_PROFILE_ID) === state.activeProfileId)
+    .map((card) => card.id));
+  return history.filter((item) => item.profileId ? item.profileId === state.activeProfileId : activeIds.has(item.cardId));
 }
 
-export function deleteHistory(id: string): Promise<void> {
-  return deleteOne('history', id);
+export async function saveHistory(history: ReviewHistory, enqueue = true): Promise<void> {
+  const card = history.profileId ? undefined : await getCard(history.cardId, true);
+  const state = history.profileId || card ? undefined : await getAnkiState();
+  const requestId = enqueue ? uid('req') : history.requestId;
+  const stored: ReviewHistory = {
+    ...history,
+    requestId,
+    profileId: history.profileId ?? card?.profileId ?? state?.activeProfileId ?? DEFAULT_PROFILE_ID,
+    source: history.source ?? 'scheduled'
+  };
+  if (!enqueue) return putOne('history', stored);
+  const db = await openDatabase();
+  const transaction = db.transaction(['history', 'queue'], 'readwrite');
+  transaction.objectStore('history').put(stored);
+  transaction.objectStore('queue').put({ requestId, action: 'appendHistory', payload: { history: stored }, createdAt: nowIso(), attempts: 0 });
+  await transactionDone(transaction);
+}
+
+export async function deleteHistory(id: string, enqueue = true): Promise<void> {
+  const db = await openDatabase();
+  if (!enqueue) {
+    const transaction = db.transaction('history', 'readwrite');
+    transaction.objectStore('history').delete(id);
+    await transactionDone(transaction);
+    return;
+  }
+  const transaction = db.transaction(['history', 'queue'], 'readwrite');
+  const historyStore = transaction.objectStore('history');
+  const queueStore = transaction.objectStore('queue');
+  const history = await requestToPromise(historyStore.get(id)) as ReviewHistory | undefined;
+  const queued = await requestToPromise(queueStore.getAll()) as SyncQueueItem[];
+  let pendingAppend = false;
+  for (const item of queued) {
+    const queuedHistory = item.action === 'appendHistory' ? item.payload.history as ReviewHistory | undefined : undefined;
+    if (queuedHistory?.id === id) {
+      queueStore.delete(item.requestId);
+      pendingAppend = true;
+    }
+  }
+  historyStore.delete(id);
+  if (!pendingAppend) {
+    const requestId = uid('req');
+    queueStore.put({
+      requestId,
+      action: 'deleteHistory',
+      payload: { historyId: id, profileId: history?.profileId ?? '' },
+      createdAt: nowIso(),
+      attempts: 0
+    } satisfies SyncQueueItem);
+  }
+  await transactionDone(transaction);
 }
 
 export function getQueue(): Promise<SyncQueueItem[]> {
@@ -175,12 +258,20 @@ export function saveAnkiState(state: AnkiState): Promise<void> {
   return putOne('anki', normalizeAnkiState(state));
 }
 
-export function getCurrentSession(): Promise<ReviewSession | undefined> {
-  return getOne<ReviewSession>('sessions', 'current');
+export async function getCurrentSession(): Promise<ReviewSession | undefined> {
+  const session = await getOne<ReviewSession>('sessions', 'current');
+  if (!session) return undefined;
+  const state = await getAnkiState();
+  if (!session.profileId || session.profileId !== state.activeProfileId) {
+    await clearCurrentSession();
+    return undefined;
+  }
+  return session;
 }
 
-export function saveCurrentSession(session: ReviewSession): Promise<void> {
-  return putOne('sessions', session);
+export async function saveCurrentSession(session: ReviewSession): Promise<void> {
+  const state = await getAnkiState();
+  return putOne('sessions', { ...session, profileId: session.profileId ?? state.activeProfileId });
 }
 
 export function clearCurrentSession(): Promise<void> {
@@ -214,11 +305,13 @@ export async function pruneSnapshots(maxCount = 50): Promise<void> {
 
 export async function replaceAllData(cards: StudyCard[], history: ReviewHistory[]): Promise<void> {
   const db = await openDatabase();
-  const transaction = db.transaction(['cards', 'history'], 'readwrite');
+  const transaction = db.transaction(['cards', 'history', 'queue', 'sessions'], 'readwrite');
   const cardStore = transaction.objectStore('cards');
   const historyStore = transaction.objectStore('history');
   cardStore.clear();
   historyStore.clear();
+  transaction.objectStore('queue').clear();
+  transaction.objectStore('sessions').clear();
   cards.forEach((card) => cardStore.put(card));
   history.forEach((item) => historyStore.put(item));
   await transactionDone(transaction);
@@ -226,13 +319,15 @@ export async function replaceAllData(cards: StudyCard[], history: ReviewHistory[
 
 export async function replaceCollection(cards: StudyCard[], history: ReviewHistory[], anki: AnkiState): Promise<void> {
   const db = await openDatabase();
-  const transaction = db.transaction(['cards', 'history', 'anki'], 'readwrite');
+  const transaction = db.transaction(['cards', 'history', 'anki', 'queue', 'sessions'], 'readwrite');
   const cardStore = transaction.objectStore('cards');
   const historyStore = transaction.objectStore('history');
   const ankiStore = transaction.objectStore('anki');
   cardStore.clear();
   historyStore.clear();
   ankiStore.clear();
+  transaction.objectStore('queue').clear();
+  transaction.objectStore('sessions').clear();
   cards.forEach((card) => cardStore.put(card));
   history.forEach((item) => historyStore.put(item));
   ankiStore.put(normalizeAnkiState(anki));

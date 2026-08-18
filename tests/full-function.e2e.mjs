@@ -196,27 +196,15 @@ async function testEngine(name, engine) {
     const csvDownload=page.waitForEvent('download'); await page.getByRole('button',{name:'CSV',exact:true}).click(); const csvFile=await csvDownload; assert.ok(jsonFile && csvFile.suggestedFilename().endsWith('.csv'),`${name}: CSV export`);
 
     stage='sync-mocked-transport';
-    await page.evaluate(() => {
-      const nativeFetch = window.fetch.bind(window);
-      window.fetch = async (input, init) => {
-        const target = typeof input === 'string' ? input : input.url;
-        if (target.startsWith('https://script.google.com/macros/s/')) return new Response('', { status: 200 });
-        return nativeFetch(input, init);
-      };
-      const nativeAppend = Element.prototype.append;
-      Element.prototype.append = function(...nodes) {
-        const intercepted = this === document.head && nodes.find(node => node instanceof HTMLScriptElement && node.src.startsWith('https://script.google.com/macros/s/'));
-        if (intercepted) {
-          const callback = new URL(intercepted.src).searchParams.get('callback');
-          setTimeout(() => {
-            if (callback && typeof window[callback] === 'function') {
-              window[callback]({ ok:true, serverTime:new Date().toISOString(), cards:[], history:[], syncResults:[] });
-            }
-          }, 0);
-          return;
-        }
-        return nativeAppend.apply(this, nodes);
-      };
+    await context.route('https://script.google.com/macros/s/**', async route => {
+      const request=route.request();
+      if(request.method()==='POST') {
+        await route.fulfill({status:200,contentType:'application/json',body:'{}'});
+        return;
+      }
+      const callback=new URL(request.url()).searchParams.get('callback');
+      const result={ok:true,serverTime:new Date().toISOString(),cards:[],history:[],syncResults:[]};
+      await route.fulfill({status:200,contentType:'application/javascript',body:callback?`${callback}(${JSON.stringify(result)});`:''});
     });
     await page.evaluate(async()=>{const db=await import('./assets/storage/db.js');const s=await db.getSettings();await db.saveSettings({...s,gasUrl:'https://script.google.com/macros/s/abcdefghijklmnop/exec',syncSecret:'0123456789abcdef',autoSync:false});});
     await page.locator('#sync-button').click();

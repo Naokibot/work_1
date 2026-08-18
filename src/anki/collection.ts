@@ -8,6 +8,7 @@ import type {
   StudyNote
 } from '../types.js';
 import {
+  deleteHistory,
   deleteSnapshot,
   getAnkiState,
   getCards,
@@ -16,7 +17,6 @@ import {
   pruneSnapshots,
   replaceCollection,
   saveAnkiState,
-  saveCard,
   saveCards,
   saveSnapshot
 } from '../storage/db.js';
@@ -34,10 +34,11 @@ import { searchCards } from './search.js';
 import { nowIso, uid } from '../utils/core.js';
 
 const HOUR_MS = 3_600_000;
+const REVIEW_UNDO_WINDOW_MS = 30_000;
 
 export async function initializeAnkiCollection(): Promise<{ migratedCards: number; notesAdded: number }> {
   const state = await getAnkiState();
-  const cards = await getCards(true);
+  const cards = await getCards(true, true);
   let migratedCards = 0;
   let notesAdded = 0;
   const notes = [...state.notes];
@@ -73,10 +74,10 @@ export function cardsInDeck(cards: StudyCard[], state: AnkiState, deckId: string
   const allowed = new Set([deck.id]);
   if (includeChildren) {
     for (const candidate of state.decks) {
-      if (candidate.name.startsWith(`${deck.name}::`)) allowed.add(candidate.id);
+      if (candidate.profileId === deck.profileId && candidate.name.startsWith(`${deck.name}::`)) allowed.add(candidate.id);
     }
   }
-  return cards.filter((card) => allowed.has(card.deckId ?? DEFAULT_DECK_ID));
+  return cards.filter((card) => (card.profileId ?? DEFAULT_PROFILE_ID) === deck.profileId && allowed.has(card.deckId ?? DEFAULT_DECK_ID));
 }
 
 export function presetForCard(card: StudyCard, state: AnkiState) {
@@ -125,7 +126,7 @@ export async function regenerateNote(noteId: string): Promise<StudyCard[]> {
   const state = await getAnkiState();
   const note = state.notes.find((item) => item.id === noteId);
   if (!note) throw new Error('ノートが見つかりません。');
-  const existing = (await getCards(true)).filter((card) => card.noteId === noteId);
+  const existing = (await getCards(true, true)).filter((card) => card.noteId === noteId);
   const generated = generateCardsForNote(note, state, existing);
   const generatedKeys = new Set(generated.map((card) => card.templateId));
   const timestamp = nowIso();
@@ -147,7 +148,7 @@ export async function createDeck(name: string, parentId?: string): Promise<DeckD
   const state = await getAnkiState();
   const trimmed = name.trim();
   if (!trimmed) throw new Error('デッキ名を入力してください。');
-  const parent = parentId ? state.decks.find((item) => item.id === parentId) : undefined;
+  const parent = parentId ? state.decks.find((item) => item.id === parentId && item.profileId === state.activeProfileId) : undefined;
   const fullName = parent && !trimmed.includes('::') ? `${parent.name}::${trimmed}` : trimmed;
   if (state.decks.some((item) => item.profileId === state.activeProfileId && item.name.toLowerCase() === fullName.toLowerCase())) {
     throw new Error('同名のデッキがあります。');
@@ -168,15 +169,17 @@ export async function createDeck(name: string, parentId?: string): Promise<DeckD
 
 export async function renameDeck(deckId: string, name: string): Promise<void> {
   const state = await getAnkiState();
-  const deck = state.decks.find((item) => item.id === deckId);
+  const deck = state.decks.find((item) => item.id === deckId && item.profileId === state.activeProfileId);
   if (!deck) throw new Error('デッキが見つかりません。');
   const trimmed = name.trim();
   if (!trimmed) throw new Error('デッキ名を入力してください。');
+  if (state.decks.some((item) => item.profileId === deck.profileId && item.id !== deck.id && item.name.toLowerCase() === trimmed.toLowerCase())) throw new Error('同名のデッキがあります。');
   const oldPrefix = `${deck.name}::`;
   const timestamp = nowIso();
   await saveAnkiState({
     ...state,
     decks: state.decks.map((item) => {
+      if (item.profileId !== deck.profileId) return item;
       if (item.id === deck.id) return { ...item, name: trimmed, updatedAt: timestamp };
       if (item.name.startsWith(oldPrefix)) return { ...item, name: `${trimmed}::${item.name.slice(oldPrefix.length)}`, updatedAt: timestamp };
       return item;
@@ -185,15 +188,21 @@ export async function renameDeck(deckId: string, name: string): Promise<void> {
 }
 
 export async function deleteDeck(deckId: string): Promise<void> {
-  if (deckId === DEFAULT_DECK_ID) throw new Error('Defaultデッキは削除できません。');
   const state = await getAnkiState();
-  const deck = state.decks.find((item) => item.id === deckId);
+  const deck = state.decks.find((item) => item.id === deckId && item.profileId === state.activeProfileId);
   if (!deck) return;
-  const ids = new Set(state.decks.filter((item) => item.id === deckId || item.name.startsWith(`${deck.name}::`)).map((item) => item.id));
-  const cards = await getCards(true);
-  await saveCards(cards.filter((card) => ids.has(card.deckId ?? DEFAULT_DECK_ID)).map((card) => ({ ...card, deckId: DEFAULT_DECK_ID, updatedAt: nowIso(), version: card.version + 1 })));
-  const notes = state.notes.map((note) => ids.has(note.deckId) ? { ...note, deckId: DEFAULT_DECK_ID, updatedAt: nowIso() } : note);
-  await saveAnkiState({ ...state, decks: state.decks.filter((item) => !ids.has(item.id)), notes });
+  if (deck.name === 'Default') throw new Error('各プロファイルのDefaultデッキは削除できません。');
+  const fallback = state.decks.find((item) => item.profileId === deck.profileId && item.name === 'Default');
+  if (!fallback) throw new Error('退避先のDefaultデッキが見つかりません。');
+  const ids = new Set(state.decks
+    .filter((item) => item.profileId === deck.profileId && (item.id === deckId || item.name.startsWith(`${deck.name}::`)))
+    .map((item) => item.id));
+  const cards = await getCards(true, true);
+  await saveCards(cards
+    .filter((card) => (card.profileId ?? DEFAULT_PROFILE_ID) === deck.profileId && ids.has(card.deckId ?? DEFAULT_DECK_ID))
+    .map((card) => ({ ...card, deckId: fallback.id, updatedAt: nowIso(), version: card.version + 1 })));
+  const notes = state.notes.map((note) => note.profileId === deck.profileId && ids.has(note.deckId) ? { ...note, deckId: fallback.id, updatedAt: nowIso() } : note);
+  await saveAnkiState({ ...state, decks: state.decks.filter((item) => item.profileId !== deck.profileId || !ids.has(item.id)), notes });
 }
 
 export async function createFilteredDeck(name: string, search: string, limit: number, reschedule: boolean): Promise<FilteredDeckDefinition> {
@@ -209,7 +218,7 @@ export async function createFilteredDeck(name: string, search: string, limit: nu
 
 export async function cardsForFilteredDeck(id: string): Promise<StudyCard[]> {
   const [state, cards, history] = await Promise.all([getAnkiState(), getCards(), getHistory()]);
-  const filtered = state.filteredDecks.find((item) => item.id === id);
+  const filtered = state.filteredDecks.find((item) => item.id === id && item.profileId === state.activeProfileId);
   if (!filtered) return [];
   const result = searchCards(activeProfileCards(cards, state), state, history, filtered.search).slice(0, filtered.limit);
   return result.map((card) => ({ ...card, originalDeckId: card.originalDeckId ?? card.deckId, filteredDeckId: filtered.id }));
@@ -254,21 +263,54 @@ export async function setDueDate(ids: string[], daysFromNow: number): Promise<vo
 
 export async function pushUndo(label: string, cards: StudyCard[]): Promise<void> {
   const state = await getAnkiState();
-  const entry = { id: uid('undo'), label, createdAt: nowIso(), cards: cards.map((card) => structuredClone(card)) };
+  const profileId = state.activeProfileId;
+  const allCards = await getCards(true);
+  const snapshot = new Map(cards.map((card) => [card.id, structuredClone(card)]));
+  for (const card of cards) {
+    if (!card.siblingGroup) continue;
+    for (const sibling of allCards) {
+      if (sibling.siblingGroup === card.siblingGroup) snapshot.set(sibling.id, structuredClone(sibling));
+    }
+  }
+  const noteIds = new Set([...snapshot.values()].map((card) => card.noteId).filter((id): id is string => Boolean(id)));
+  const notes = state.notes.filter((note) => note.profileId === profileId && noteIds.has(note.id)).map((note) => structuredClone(note));
+  const entry = { id: uid('undo'), label, createdAt: nowIso(), profileId, cards: [...snapshot.values()], notes };
   await saveAnkiState({ ...state, undo: [...state.undo, entry].slice(-20) });
 }
 
 export async function undoLast(): Promise<string | null> {
   const state = await getAnkiState();
-  const entry = state.undo.at(-1);
-  if (!entry) return null;
+  let index = -1;
+  for (let i = state.undo.length - 1; i >= 0; i -= 1) {
+    if (!state.undo[i]?.profileId || state.undo[i]?.profileId === state.activeProfileId) { index = i; break; }
+  }
+  if (index < 0) return null;
+  const entry = state.undo[index]!;
+  const profileId = entry.profileId ?? state.activeProfileId;
+  if (entry.label === '復習' || entry.label === '模擬テスト') {
+    const cardIds = new Set(entry.cards.map((card) => card.id));
+    const createdAt = new Date(entry.createdAt).getTime();
+    const history = (await getHistory(true))
+      .filter((item) => cardIds.has(item.cardId) && (item.profileId ?? profileId) === profileId)
+      .filter((item) => Math.abs(new Date(item.reviewedAt).getTime() - createdAt) <= REVIEW_UNDO_WINDOW_MS)
+      .sort((a, b) => b.reviewedAt.localeCompare(a.reviewedAt));
+    const removedCards = new Set<string>();
+    for (const item of history) {
+      if (removedCards.has(item.cardId)) continue;
+      removedCards.add(item.cardId);
+      await deleteHistory(item.id);
+    }
+  }
   await saveCards(entry.cards);
-  await saveAnkiState({ ...state, undo: state.undo.slice(0, -1) });
+  const latest = await getAnkiState();
+  const noteSnapshots = new Map((entry.notes ?? []).map((note) => [note.id, note]));
+  const notes = latest.notes.map((note) => noteSnapshots.get(note.id) ?? note);
+  await saveAnkiState({ ...latest, notes, undo: latest.undo.filter((item) => item.id !== entry.id) });
   return entry.label;
 }
 
 export async function createSnapshot(reason: CollectionSnapshot['reason'], label: string): Promise<CollectionSnapshot> {
-  const [cards, history, anki] = await Promise.all([getCards(true), getHistory(), getAnkiState()]);
+  const [cards, history, anki] = await Promise.all([getCards(true, true), getHistory(true), getAnkiState()]);
   const snapshot: CollectionSnapshot = { id: uid('snapshot'), createdAt: nowIso(), reason, label, cards, history, anki };
   await saveSnapshot(snapshot);
   await pruneSnapshots(50);
@@ -294,17 +336,19 @@ export async function removeSnapshot(id: string): Promise<void> {
 }
 
 export async function checkCollection(): Promise<string[]> {
-  const [state, cards] = await Promise.all([getAnkiState(), getCards(true)]);
+  const [state, cards] = await Promise.all([getAnkiState(), getCards(true, true)]);
   const errors: string[] = [];
   const cardIds = new Set<string>();
   const noteIds = new Set(state.notes.map((note) => note.id));
-  const deckIds = new Set(state.decks.map((deck) => deck.id));
+  const deckById = new Map(state.decks.map((deck) => [deck.id, deck]));
   const typeIds = new Set(state.noteTypes.map((type) => type.id));
   for (const card of cards) {
     if (cardIds.has(card.id)) errors.push(`重複カードID: ${card.id}`);
     cardIds.add(card.id);
     if (card.noteId && !noteIds.has(card.noteId)) errors.push(`カード ${card.id}: ノート ${card.noteId} がありません`);
-    if (card.deckId && !deckIds.has(card.deckId)) errors.push(`カード ${card.id}: デッキ ${card.deckId} がありません`);
+    if (card.deckId && !deckById.has(card.deckId)) errors.push(`カード ${card.id}: デッキ ${card.deckId} がありません`);
+    const deck = card.deckId ? deckById.get(card.deckId) : undefined;
+    if (deck && deck.profileId !== (card.profileId ?? DEFAULT_PROFILE_ID)) errors.push(`カード ${card.id}: 別プロファイルのデッキを参照しています`);
     if (card.noteTypeId && !typeIds.has(card.noteTypeId)) errors.push(`カード ${card.id}: ノートタイプ ${card.noteTypeId} がありません`);
     if (Number.isNaN(new Date(card.schedule.due).getTime())) errors.push(`カード ${card.id}: 復習日時が不正です`);
   }
@@ -312,7 +356,7 @@ export async function checkCollection(): Promise<string[]> {
 }
 
 export async function deleteEmptyCards(): Promise<number> {
-  const [state, cards] = await Promise.all([getAnkiState(), getCards(true)]);
+  const [state, cards] = await Promise.all([getAnkiState(), getCards(true, true)]);
   const empty = state.notes.flatMap((note) => findEmptyGeneratedCards(note, state, cards));
   const now = nowIso();
   await saveCards(empty.map((card) => ({ ...card, deletedAt: now, updatedAt: now, version: card.version + 1 })));
@@ -320,7 +364,7 @@ export async function deleteEmptyCards(): Promise<number> {
 }
 
 export async function exportCollectionPackage(): Promise<string> {
-  const [state, cards, history] = await Promise.all([getAnkiState(), getCards(true), getHistory()]);
+  const [state, cards, history] = await Promise.all([getAnkiState(), getCards(true, true), getHistory(true)]);
   return JSON.stringify({ format: 'work-1-anki-collection', version: 1, exportedAt: nowIso(), anki: state, cards, history }, null, 2);
 }
 
@@ -354,7 +398,7 @@ export async function importTextCards(text: string, deckId = DEFAULT_DECK_ID, no
   const delimiter = text.includes('\t') ? '\t' : ',';
   const rows = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim()).map((line) => parseDelimitedLine(line, delimiter));
   let count = 0;
-  let nextState = { ...state, notes: [...state.notes] };
+  const nextState = { ...state, notes: [...state.notes] };
   const generated: StudyCard[] = [];
   for (const row of rows) {
     const front = row[0]?.trim() ?? '';

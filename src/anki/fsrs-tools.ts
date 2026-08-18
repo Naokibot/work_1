@@ -3,15 +3,16 @@ import { FSRS6_DEFAULT_PARAMETERS, initialSchedule, retrievability, scheduleRevi
 
 export interface FsrsEvaluation { reviews:number; logLoss:number; rmse:number; }
 function clampParam(value:number,index:number):number{if(!Number.isFinite(value))return FSRS6_DEFAULT_PARAMETERS[index]??1;if(index<=3)return Math.max(.01,Math.min(100,value));if(index===4)return Math.max(1,Math.min(10,value));if(index===20)return Math.max(.02,Math.min(1,value));return Math.max(-20,Math.min(20,value));}
+function fsrsHistory(history:ReviewHistory[]):ReviewHistory[]{return history.filter(item=>(item.source??'scheduled')!=='exam')}
 export function evaluateFsrs(history:ReviewHistory[], parameters:readonly number[]=FSRS6_DEFAULT_PARAMETERS):FsrsEvaluation{
- const byCard=new Map<string,ReviewHistory[]>();for(const item of history){const arr=byCard.get(item.cardId)??[];arr.push(item);byCard.set(item.cardId,arr)}
+ const byCard=new Map<string,ReviewHistory[]>();for(const item of fsrsHistory(history)){const arr=byCard.get(item.cardId)??[];arr.push(item);byCard.set(item.cardId,arr)}
  let loss=0,squared=0,count=0;for(const items of byCard.values()){items.sort((a,b)=>a.reviewedAt.localeCompare(b.reviewedAt));let state=initialSchedule(new Date(items[0]?.reviewedAt??Date.now()));for(const item of items){const now=new Date(item.reviewedAt);if(state.reps>0){const p=Math.max(.001,Math.min(.999,retrievability(state,now,{parameters})));const y=item.isCorrect?1:0;loss+=-(y*Math.log(p)+(1-y)*Math.log(1-p));squared+=(p-y)**2;count++}state=scheduleReview(state,item.rating,now,{parameters,desiredRetention:.9,learningStepsMinutes:[],relearningStepsMinutes:[]}).state}}
  return{reviews:count,logLoss:count?loss/count:0,rmse:count?Math.sqrt(squared/count):0};
 }
 export function optimizeFsrsParameters(history:ReviewHistory[], starting:readonly number[]=FSRS6_DEFAULT_PARAMETERS):number[]{
- let best=[...starting].slice(0,21).map(clampParam);while(best.length<21)best.push(FSRS6_DEFAULT_PARAMETERS[best.length]??1);let score=evaluateFsrs(history,best).logLoss;if(history.length<20)return best;
+ const eligible=fsrsHistory(history);let best=[...starting].slice(0,21).map(clampParam);while(best.length<21)best.push(FSRS6_DEFAULT_PARAMETERS[best.length]??1);let score=evaluateFsrs(eligible,best).logLoss;if(eligible.length<20)return best;
  const indices=[0,1,2,3,4,5,6,8,9,10,11,12,13,14,15,16,17,18,19,20];
- for(let pass=0;pass<2;pass++){for(const index of indices){for(const factor of [0.85,1.15]){const candidate=[...best];const current=candidate[index]??1;candidate[index]=clampParam(current===0?(factor-1):current*factor,index);const next=evaluateFsrs(history,candidate).logLoss;if(next>0&&next<score){best=candidate;score=next}}}}
+ for(let pass=0;pass<2;pass++){for(const index of indices){for(const factor of [0.85,1.15]){const candidate=[...best];const current=candidate[index]??1;candidate[index]=clampParam(current===0?(factor-1):current*factor,index);const next=evaluateFsrs(eligible,candidate).logLoss;if(next>0&&next<score){best=candidate;score=next}}}}
  return best;
 }
 export function minimumRecommendedRetention(cards:StudyCard[], preset:DeckOptionsPreset):number{

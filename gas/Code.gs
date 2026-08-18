@@ -10,11 +10,12 @@ const CONFIG = Object.freeze({
 const CARD_HEADERS = [
   'ID', 'Question', 'Answer', 'Distractor1', 'Distractor2', 'Distractor3', 'Explanation', 'Tags', 'Favorite',
   'CreatedAt', 'UpdatedAt', 'DeletedAt', 'Stability', 'Difficulty', 'DueAt', 'Reps', 'Lapses', 'Streak',
-  'CorrectCount', 'IncorrectCount', 'TotalTimeMs', 'FastestMs', 'LastTimesMs', 'LastReviewAt', 'Version', 'LastRequestId'
+  'CorrectCount', 'IncorrectCount', 'TotalTimeMs', 'FastestMs', 'LastTimesMs', 'LastReviewAt', 'Version', 'LastRequestId', 'Metadata'
 ];
 
 const HISTORY_HEADERS = [
-  'ID', 'ReviewedAt', 'CardID', 'Question', 'Tags', 'Rating', 'Correct', 'ResponseMs', 'NextDueAt', 'Device', 'RequestId'
+  'ID', 'ReviewedAt', 'CardID', 'Question', 'Tags', 'Rating', 'Correct', 'ResponseMs', 'NextDueAt', 'Device', 'RequestId',
+  'ProfileId', 'Source', 'WasNew', 'DeletedAt'
 ];
 
 const SYNC_HEADERS = ['RequestId', 'ReceivedAt', 'Action', 'Outcome', 'CardID', 'Message'];
@@ -114,6 +115,7 @@ function handleWrite_(request) {
   if (request.action === 'upsertCard') result = upsertCard_(request.payload && request.payload.card, request.requestId, false);
   else if (request.action === 'deleteCard') result = upsertCard_(request.payload && request.payload.card, request.requestId, true);
   else if (request.action === 'appendHistory') result = appendHistory_(request.payload && request.payload.history, request.requestId);
+  else if (request.action === 'deleteHistory') result = deleteHistory_(request.payload && request.payload.historyId);
   else throw new Error('Unsupported write action.');
 
   appendSyncLog_(request.requestId, request.action, result.outcome, result.cardId || '', result.message || '');
@@ -133,7 +135,8 @@ function pull_(payload) {
     return parseDate_(card.updatedAt) > since;
   }).slice(-CONFIG.maxRowsPerPull);
   const history = readHistory_(spreadsheet.getSheetByName(CONFIG.historySheet)).filter(function (item) {
-    return parseDate_(item.reviewedAt) > since;
+    const changed = parseDate_(item.deletedAt) || parseDate_(item.reviewedAt);
+    return changed > since;
   }).slice(-CONFIG.maxRowsPerPull);
   const syncResults = readSyncLog_(spreadsheet.getSheetByName(CONFIG.syncSheet)).filter(function (item) {
     return parseDate_(item.receivedAt) > since;
@@ -172,10 +175,27 @@ function upsertCard_(card, requestId, deleting) {
 
 function appendHistory_(history, requestId) {
   validateHistory_(history);
-  const normalized = Object.assign({}, history, { requestId: requestId });
+  const normalized = Object.assign({}, history, { requestId: requestId, deletedAt: '' });
   const sheet = getSpreadsheet_().getSheetByName(CONFIG.historySheet);
-  sheet.appendRow(historyToRow_(normalized));
+  const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, HISTORY_HEADERS.length).getValues() : [];
+  let rowIndex = -1;
+  for (let i = 0; i < rows.length; i += 1) if (String(rows[i][0] || '') === normalized.id) { rowIndex = i + 2; break; }
+  if (rowIndex === -1) sheet.appendRow(historyToRow_(normalized));
+  else sheet.getRange(rowIndex, 1, 1, HISTORY_HEADERS.length).setValues([historyToRow_(normalized)]);
   return { outcome: 'accepted', cardId: normalized.cardId, message: '' };
+}
+
+function deleteHistory_(historyId) {
+  const id = String(historyId || '');
+  if (!/^history_[A-Za-z0-9_-]+$/.test(id)) throw new Error('Invalid history ID.');
+  const sheet = getSpreadsheet_().getSheetByName(CONFIG.historySheet);
+  if (!sheet || sheet.getLastRow() < 2) return { outcome: 'accepted', cardId: '', message: '' };
+  const found = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
+  if (!found) return { outcome: 'accepted', cardId: '', message: '' };
+  const row = found.getRow();
+  const cardId = String(sheet.getRange(row, 3).getValue() || '');
+  sheet.getRange(row, HISTORY_HEADERS.length).setValue(new Date().toISOString());
+  return { outcome: 'accepted', cardId: cardId, message: '' };
 }
 
 function verifyRequest_(request) {
@@ -256,8 +276,9 @@ function readHistory_(sheet) {
     .map(function (row) {
       return {
         id: String(row[0]), reviewedAt: iso_(row[1]), cardId: String(row[2]), questionSnapshot: unsanitizeCell_(row[3]),
-        tags: splitTags_(row[4]), rating: String(row[5]), isCorrect: Boolean(row[6]), responseMs: Number(row[7] || 0),
-        nextDue: iso_(row[8]), device: String(row[9] || 'Web'), requestId: String(row[10] || '')
+        tags: splitTags_(row[4]), rating: String(row[5]), isCorrect: boolean_(row[6]), responseMs: Number(row[7] || 0),
+        nextDue: iso_(row[8]), device: String(row[9] || 'Web'), requestId: String(row[10] || ''),
+        profileId: String(row[11] || ''), source: String(row[12] || 'scheduled'), wasNew: boolean_(row[13]), deletedAt: row[14] ? iso_(row[14]) : null
       };
     });
 }
@@ -286,15 +307,16 @@ function appendSyncLog_(requestId, action, outcome, cardId, message) {
 }
 
 function cardFromRow_(row) {
-  return {
+  const base = {
     id: String(row[0]), question: unsanitizeCell_(row[1]), answer: unsanitizeCell_(row[2]),
     distractors: [row[3], row[4], row[5]].map(unsanitizeCell_).filter(Boolean), explanation: unsanitizeCell_(row[6]),
-    tags: splitTags_(row[7]), favorite: Boolean(row[8]), createdAt: iso_(row[9]), updatedAt: iso_(row[10]),
+    tags: splitTags_(row[7]), favorite: boolean_(row[8]), createdAt: iso_(row[9]), updatedAt: iso_(row[10]),
     deletedAt: row[11] ? iso_(row[11]) : null,
     schedule: { stability: Number(row[12] || 0), difficulty: Number(row[13] || 5), due: iso_(row[14]), reps: Number(row[15] || 0), lapses: Number(row[16] || 0), streak: Number(row[17] || 0), lastReview: row[23] ? iso_(row[23]) : null },
     stats: { correct: Number(row[18] || 0), incorrect: Number(row[19] || 0), totalTimeMs: Number(row[20] || 0), fastestMs: row[21] === '' ? null : Number(row[21]), lastTimesMs: parseNumberArray_(row[22]) },
     version: Number(row[24] || 1), lastRequestId: String(row[25] || '')
   };
+  return Object.assign(base, parseObject_(row[26]));
 }
 
 function cardToRow_(card) {
@@ -303,20 +325,21 @@ function cardToRow_(card) {
     sanitizeCell_(card.explanation), sanitizeCell_(card.tags.join(',')), Boolean(card.favorite), card.createdAt, card.updatedAt, card.deletedAt || '',
     card.schedule.stability, card.schedule.difficulty, card.schedule.due, card.schedule.reps, card.schedule.lapses, card.schedule.streak,
     card.stats.correct, card.stats.incorrect, card.stats.totalTimeMs, card.stats.fastestMs === null ? '' : card.stats.fastestMs, JSON.stringify(card.stats.lastTimesMs || []), card.schedule.lastReview || '',
-    card.version, card.lastRequestId || ''
+    card.version, card.lastRequestId || '', JSON.stringify(cardMetadata_(card))
   ];
 }
 
 function historyToRow_(history) {
   return [
     history.id, history.reviewedAt, history.cardId, sanitizeCell_(history.questionSnapshot), sanitizeCell_((history.tags || []).join(',')),
-    history.rating, Boolean(history.isCorrect), Number(history.responseMs || 0), history.nextDue, sanitizeCell_(history.device || 'Web'), history.requestId
+    history.rating, Boolean(history.isCorrect), Number(history.responseMs || 0), history.nextDue, sanitizeCell_(history.device || 'Web'), history.requestId,
+    cleanText_(history.profileId || '', 120), cleanText_(history.source || 'scheduled', 20), Boolean(history.wasNew), history.deletedAt || ''
   ];
 }
 
 function normalizeCard_(card, requestId, deleting) {
   const now = new Date().toISOString();
-  return {
+  const base = {
     id: String(card.id), question: cleanText_(card.question, 5000), answer: cleanText_(card.answer, 5000),
     distractors: (Array.isArray(card.distractors) ? card.distractors : []).slice(0, 3).map(function (value) { return cleanText_(value, 5000); }),
     explanation: cleanText_(card.explanation || '', CONFIG.maxText), tags: (Array.isArray(card.tags) ? card.tags : []).slice(0, 20).map(function (tag) { return cleanText_(tag, 120); }),
@@ -335,6 +358,29 @@ function normalizeCard_(card, requestId, deleting) {
     },
     version: boundedNumber_(card.version, 1, 1000000000, 1), lastRequestId: requestId
   };
+  return Object.assign(base, cardMetadata_(card));
+}
+
+function cardMetadata_(card) {
+  const queue = ['new', 'learning', 'review', 'relearning'].indexOf(String(card.queue || '')) >= 0 ? String(card.queue) : undefined;
+  return {
+    cardNumber: cleanText_(card.cardNumber || '', 120) || undefined,
+    profileId: cleanText_(card.profileId || '', 120) || undefined,
+    deckId: cleanText_(card.deckId || '', 160) || undefined,
+    noteId: cleanText_(card.noteId || '', 160) || undefined,
+    noteTypeId: cleanText_(card.noteTypeId || '', 160) || undefined,
+    templateId: cleanText_(card.templateId || '', 160) || undefined,
+    queue: queue,
+    position: Number.isFinite(Number(card.position)) ? Number(card.position) : undefined,
+    flag: boundedNumber_(card.flag, 0, 7, 0),
+    suspended: Boolean(card.suspended),
+    buriedUntil: validIso_(card.buriedUntil) || null,
+    marked: Boolean(card.marked),
+    typedAnswer: cleanText_(card.typedAnswer || '', 5000) || undefined,
+    siblingGroup: cleanText_(card.siblingGroup || '', 160) || undefined,
+    originalDeckId: cleanText_(card.originalDeckId || '', 160) || undefined,
+    filteredDeckId: cleanText_(card.filteredDeckId || '', 160) || null
+  };
 }
 
 function validateCard_(card) {
@@ -350,6 +396,7 @@ function validateHistory_(history) {
   if (!/^history_[A-Za-z0-9_-]+$/.test(String(history.id || ''))) throw new Error('Invalid history ID.');
   if (!/^card_[A-Za-z0-9_-]+$|^sheet_[A-Za-z0-9_-]+$/.test(String(history.cardId || ''))) throw new Error('Invalid history card ID.');
   if (!['again', 'hard', 'good', 'easy'].includes(String(history.rating || ''))) throw new Error('Invalid rating.');
+  if (history.source && !['scheduled', 'custom', 'exam'].includes(String(history.source))) throw new Error('Invalid history source.');
   if (!validIso_(history.reviewedAt) || !validIso_(history.nextDue)) throw new Error('Invalid history time.');
 }
 
@@ -406,6 +453,17 @@ function parseNumberArray_(value) {
     const parsed = JSON.parse(String(value || '[]'));
     return Array.isArray(parsed) ? parsed.slice(-10).map(function (n) { return Number(n) || 0; }) : [];
   } catch (_) { return []; }
+}
+
+function parseObject_(value) {
+  try {
+    const parsed = JSON.parse(String(value || '{}'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) { return {}; }
+}
+
+function boolean_(value) {
+  return value === true || String(value || '').toLowerCase() === 'true';
 }
 
 function boundedNumber_(value, min, max, fallback) {

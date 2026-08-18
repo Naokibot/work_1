@@ -1,7 +1,7 @@
-import type { AnkiState, AppSettings, CardFlag, Rating, ReviewHistory, ReviewSession, ReviewStyle, StudyCard } from '../types.js';
+import type { AnkiState, AppSettings, CardFlag, Rating, ReviewHistory, ReviewSession, ReviewSource, ReviewStyle, StudyCard } from '../types.js';
 import { ScratchPad } from '../canvas/pad.js';
 import { scheduleReview } from '../scheduler/scheduler.js';
-import { clearCurrentSession, getAnkiState, getCard, getCards, getSettings, saveAnkiState, saveCard, saveCards, saveCurrentSession, saveHistory, saveQueueItem } from '../storage/db.js';
+import { clearCurrentSession, getAnkiState, getCard, getCards, getSettings, saveAnkiState, saveCard, saveCards, saveCurrentSession, saveHistory } from '../storage/db.js';
 import { presetForCard, pushUndo } from '../anki/collection.js';
 import { renderRich, plainText, replayMedia } from '../ui/rich.js';
 import { deviceLabel, nowIso, shuffle, uid } from '../utils/core.js';
@@ -34,8 +34,9 @@ export class ReviewController{
  }
 
  async start(session:ReviewSession):Promise<void>{
-  this.session=session;
   [this.state,this.preferences]=await Promise.all([getAnkiState(),getSettings()]);
+  session.profileId=this.state.activeProfileId;
+  this.session=session;
   await saveCurrentSession(session);
   this.elements.screen.hidden=false;
   document.body.style.overflow='hidden';
@@ -197,6 +198,11 @@ export class ReviewController{
  private stopTimer(){if(!this.responseMs)this.responseMs=Math.max(250,performance.now()-this.questionStartedAt);clearInterval(this.timerHandle)}
 
  private isAutoGraded():boolean{return Boolean(this.currentCard?.typedAnswer)||this.session?.style==='choice'||this.session?.style==='type'||this.session?.style==='spell'}
+ private historySource():ReviewSource{
+  if(this.session?.mode==='exam')return 'exam';
+  if(this.session&&['due','new','deck'].includes(this.session.mode))return 'scheduled';
+  return 'custom';
+ }
  private applyAutomaticRatingGuard():void{
   if(!this.isAutoGraded()||this.answeredCorrectly)return;
   for(const button of this.elements.ratingRow.querySelectorAll<HTMLButtonElement>('[data-rating]'))button.disabled=button.dataset.rating!=='again';
@@ -261,13 +267,11 @@ export class ReviewController{
    const leechHit=reschedule&&effectiveRating==='again'&&this.currentCard.schedule.reps>0&&nextLapses>=threshold&&((nextLapses-threshold)%Math.max(1,Math.floor(threshold/2))===0);
    const leechTags=leechHit?[...new Set([...this.currentCard.tags,'leech'])]:this.currentCard.tags;
    const updated:StudyCard={...this.currentCard,tags:leechTags,suspended:leechHit&&preset?.leechAction!=='tag'?true:this.currentCard.suspended,schedule:result.state,queue:result.queue,stats:{correct:this.currentCard.stats.correct+(isCorrect?1:0),incorrect:this.currentCard.stats.incorrect+(isCorrect?0:1),totalTimeMs:this.currentCard.stats.totalTimeMs+responseMs,fastestMs:include?(this.currentCard.stats.fastestMs===null?raw:Math.min(this.currentCard.stats.fastestMs,raw)):this.currentCard.stats.fastestMs,lastTimesMs:times},updatedAt:now.toISOString(),version:this.currentCard.version+1,lastRequestId:requestId};
-   const history:ReviewHistory={id:uid('history'),cardId:updated.id,cardNumberSnapshot:updated.cardNumber??'',questionSnapshot:plainText(updated.question),tags:[...updated.tags],rating:effectiveRating,isCorrect,responseMs,reviewedAt:now.toISOString(),nextDue:result.state.due,device:deviceLabel(),requestId:uid('req')};
+   const history:ReviewHistory={id:uid('history'),cardId:updated.id,cardNumberSnapshot:updated.cardNumber??'',questionSnapshot:plainText(updated.question),tags:[...updated.tags],rating:effectiveRating,isCorrect,responseMs,reviewedAt:now.toISOString(),nextDue:result.state.due,device:deviceLabel(),requestId:uid('req'),profileId:updated.profileId??state.activeProfileId,source:this.historySource(),wasNew:this.currentCard.schedule.reps===0};
    await pushUndo(this.session.mode==='exam'?'模擬テスト':'復習',[this.currentCard]);
    await saveCard(updated);
    if(leechHit&&updated.noteId){const latest=await getAnkiState();await saveAnkiState({...latest,notes:latest.notes.map(n=>n.id===updated.noteId?{...n,tags:[...new Set([...n.tags,'leech'])],updatedAt:nowIso()}:n)});}
-   await saveQueueItem({requestId,action:'upsertCard',payload:{card:updated},createdAt:nowIso(),attempts:0});
    await saveHistory(history);
-   await saveQueueItem({requestId:history.requestId,action:'appendHistory',payload:{history},createdAt:nowIso(),attempts:0});
    if(reschedule)await this.burySiblings(updated,state,preset?.buryNewSiblings??true,preset?.buryReviewSiblings??true,preset?.buryInterdayLearningSiblings??true);
    if(reschedule&&effectiveRating==='again'){
     const at=Math.min(this.session.cursor+5,this.session.queue.length);
@@ -280,7 +284,7 @@ export class ReviewController{
  }
 
  private async burySiblings(card:StudyCard,state:AnkiState,buryNew:boolean,buryReview:boolean,buryLearning:boolean){if(!card.siblingGroup)return;const cards=await getCards();const tomorrow=new Date();tomorrow.setHours(24,0,0,0);const siblings=cards.filter(c=>c.id!==card.id&&c.siblingGroup===card.siblingGroup&&!c.deletedAt&&!c.suspended).filter(c=>{const q=c.queue??(c.schedule.reps?'review':'new');return q==='new'?buryNew:q==='review'?buryReview:buryLearning});if(!siblings.length)return;await saveCards(siblings.map(c=>({...c,buriedUntil:tomorrow.toISOString(),updatedAt:nowIso(),version:c.version+1})));this.state=state}
- private async toggleFavorite(){if(!this.currentCard)return;const requestId=uid('req');const updated={...this.currentCard,favorite:!this.currentCard.favorite,marked:!this.currentCard.favorite,updatedAt:nowIso(),version:this.currentCard.version+1,lastRequestId:requestId};this.currentCard=updated;this.elements.favorite.textContent=updated.favorite?'★':'☆';await saveCard(updated);await saveQueueItem({requestId,action:'upsertCard',payload:{card:updated},createdAt:nowIso(),attempts:0})}
+ private async toggleFavorite(){if(!this.currentCard)return;const requestId=uid('req');const updated={...this.currentCard,favorite:!this.currentCard.favorite,marked:!this.currentCard.favorite,updatedAt:nowIso(),version:this.currentCard.version+1,lastRequestId:requestId};this.currentCard=updated;this.elements.favorite.textContent=updated.favorite?'★':'☆';await saveCard(updated)}
  private async cycleFlag(){if(!this.currentCard)return;const flag=((this.currentCard.flag??0)+1)%8 as CardFlag;this.currentCard={...this.currentCard,flag,updatedAt:nowIso(),version:this.currentCard.version+1};this.elements.flag.textContent=flag?`⚑${flag}`:'⚑';await saveCard(this.currentCard)}
  private async buryCard(){if(!this.currentCard||!this.session)return;const tomorrow=new Date();tomorrow.setHours(24,0,0,0);await saveCard({...this.currentCard,buriedUntil:tomorrow.toISOString(),updatedAt:nowIso(),version:this.currentCard.version+1});this.session.cursor++;await saveCurrentSession(this.session);await this.loadCurrent()}
  private async suspendCard(){if(!this.currentCard||!this.session)return;await saveCard({...this.currentCard,suspended:true,updatedAt:nowIso(),version:this.currentCard.version+1});this.session.cursor++;await saveCurrentSession(this.session);await this.loadCurrent()}
